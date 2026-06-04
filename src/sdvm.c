@@ -1,7 +1,7 @@
-﻿/*
+/*
  * ═══════════════════════════════════════════════
  *  SDVM — 执行引擎
- *  栈式虚拟机，指令循环 + 内置函数
+ *  栈式虚拟机，指令循环 + 内置函数 + 函数调用
  * ═══════════════════════════════════════════════
  */
 
@@ -71,6 +71,7 @@ void sdvm_print_value(const Value* v) {
     case VAL_BOOL:   printf(v->data.bool_val ? "true" : "false"); break;
     case VAL_STRING: printf("%s", v->data.str_val ? v->data.str_val : ""); break;
     case VAL_NULL:   printf("null"); break;
+    case VAL_FUNC:   printf("<func:%u>", v->data.func_idx); break;
     }
 }
 
@@ -81,6 +82,7 @@ const char* sdvm_value_type_str(const Value* v) {
     case VAL_BOOL:   return "bool";
     case VAL_STRING: return "str";
     case VAL_NULL:   return "null";
+    case VAL_FUNC:   return "func";
     default:         return "unknown";
     }
 }
@@ -115,6 +117,9 @@ const char* sdvm_opname(uint8_t op) {
     case OP_BIF:    return "BIF";
     case OP_RET:    return "RET";
     case OP_HALT:   return "HALT";
+    case OP_CALL:   return "CALL";
+    case OP_ANON:   return "ANON";
+    case OP_CALLR:  return "CALLR";
     case OP_PRINT:  return "PRINT";
     case OP_SCAN:   return "SCAN";
     default:        return "???";
@@ -142,7 +147,7 @@ static int val_is_number(const Value* v) {
     return v->type == VAL_INT || v->type == VAL_FLOAT;
 }
 
-/* ─── 取数辅助：从 iP 读取操作数 ──────────────── */
+/* ─── 取数辅助：从 ip 读取操作数 ──────────────── */
 #define FETCH_U32()   read_u32(vm->code + vm->ip)
 #define FETCH_I32()   read_i32(vm->code + vm->ip)
 #define FETCH_F64()   read_f64(vm->code + vm->ip)
@@ -156,8 +161,10 @@ static int val_is_number(const Value* v) {
 void sdvm_init(SDVM* vm) {
     memset(vm, 0, sizeof(SDVM));
     vm->sp = -1;
+    vm->call_sp = -1;
 }
 
+/* ─── 加载 .dance 文件 (支持 v1 和 v2) ───────── */
 int sdvm_load(SDVM* vm, const uint8_t* buffer, size_t size) {
     uint32_t off = 0;
 
@@ -178,14 +185,14 @@ int sdvm_load(SDVM* vm, const uint8_t* buffer, size_t size) {
 
     /* 版本 */
     uint32_t version = read_u32(buffer + off);
-    if (version != 1) {
+    if (version != 1 && version != 2) {
         snprintf(vm->error_msg, sizeof(vm->error_msg),
-                 "不支持的 .dance 版本: %u (支持: 1)", version);
+                 "不支持的 .dance 版本: %u (支持: 1, 2)", version);
         return -1;
     }
     off += 4;
 
-    /* 字符串常量池 */
+    /* 字符串常量池 (v1 和 v2 共用) */
     if (off + 4 > size) goto truncated;
     vm->strpool_count = read_u32(buffer + off);
     off += 4;
@@ -211,6 +218,34 @@ int sdvm_load(SDVM* vm, const uint8_t* buffer, size_t size) {
         memcpy(vm->strpool[i], buffer + off, slen);
         vm->strpool[i][slen] = '\0';
         off += slen;
+    }
+
+    if (version == 2) {
+        /* ── v2 格式: FuncTable ───────────────── */
+        if (off + 4 > size) goto truncated;
+        vm->func_count = read_u32(buffer + off);
+        off += 4;
+
+        if (vm->func_count > MAX_FUNCS) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "函数表过大: %u (上限 %d)", vm->func_count, MAX_FUNCS);
+            return -1;
+        }
+
+        for (uint32_t i = 0; i < vm->func_count; i++) {
+            if (off + 16 > size) goto truncated;
+            vm->func_table[i].name_idx    = read_u32(buffer + off); off += 4;
+            vm->func_table[i].arg_count   = read_u32(buffer + off); off += 4;
+            vm->func_table[i].local_count = read_u32(buffer + off); off += 4;
+            vm->func_table[i].code_offset = read_u32(buffer + off); off += 4;
+        }
+    } else {
+        /* v1 格式: 没有函数表, 只有一个隐式 main */
+        vm->func_count = 1;
+        vm->func_table[0].name_idx    = 0xFFFFFFFF;
+        vm->func_table[0].arg_count   = 0;
+        vm->func_table[0].local_count = 0;
+        vm->func_table[0].code_offset = 0;
     }
 
     /* 字节码 */
@@ -243,11 +278,9 @@ oom:
 
 /* ─── BIF_SEE 辅助 ──────────────────────────── */
 static void bif_see(SDVM* vm, int argc) {
-    /* 把栈上参数收集到临时数组，再顺序打印 */
     Value* args = (Value*)malloc(argc * sizeof(Value));
     if (!args) return;
 
-    /* 从栈顶依次弹出 (最后一个参数在栈顶, 所以要反转) */
     for (int i = argc - 1; i >= 0; i--) {
         if (vm->sp < 0) { free(args); return; }
         args[i] = vm->stack[vm->sp--];
@@ -275,7 +308,6 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         if (v.type == VAL_NULL) ok = 0;
         else if (v.type == VAL_STRING) {
             const char* s = v.data.str_val ? v.data.str_val : "";
-            /* 跳过 UTF-8 BOM (EF BB BF) */
             if ((unsigned char)s[0] == 0xEF && (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF) {
                 s += 3;
             }
@@ -305,7 +337,6 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         if (v.type == VAL_NULL) ok = 0;
         else if (v.type == VAL_STRING) {
             const char* s = v.data.str_val ? v.data.str_val : "";
-            /* 跳过 UTF-8 BOM (EF BB BF) */
             if ((unsigned char)s[0] == 0xEF && (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF) {
                 s += 3;
             }
@@ -330,7 +361,6 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         Value v = vm->stack[vm->sp--];
         Value r;
         r.type = VAL_STRING;
-        // 用静态缓冲区简单实现
         static char buf[128];
         switch (v.type) {
         case VAL_INT:    snprintf(buf, sizeof(buf), "%lld", (long long)v.data.int_val); break;
@@ -341,7 +371,7 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
                 snprintf(buf, sizeof(buf), "%g", v.data.float_val);
             break;
         case VAL_BOOL:   snprintf(buf, sizeof(buf), "%s", v.data.bool_val ? "true" : "false"); break;
-        case VAL_STRING: r = v; PUSH(r); return 0; /* pass through */
+        case VAL_STRING: r = v; PUSH(r); return 0;
         case VAL_NULL:   snprintf(buf, sizeof(buf), "null"); break;
         }
         r.data.str_val = buf;
@@ -375,6 +405,7 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         case VAL_BOOL:   snprintf(tbuf, sizeof(tbuf), "<class:bool>"); break;
         case VAL_STRING: snprintf(tbuf, sizeof(tbuf), "<class:str>"); break;
         case VAL_NULL:   snprintf(tbuf, sizeof(tbuf), "<class:null>"); break;
+        case VAL_FUNC:   snprintf(tbuf, sizeof(tbuf), "<class:func>"); break;
         }
         r.data.str_val = tbuf;
         PUSH(r);
@@ -404,9 +435,8 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         break;
     }
     case BIF_INSERT: {
-        /* 弹出提示符参数 (如果有) */
         if (argc > 0 && vm->sp >= 0) {
-            vm->sp--; /* discard prompt */
+            vm->sp--;
         }
         Value r;
         r.type = VAL_STRING;
@@ -417,11 +447,10 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
             size_t len = strlen(inbuf);
             while (len > 0 && (inbuf[len-1] == '\n' || inbuf[len-1] == '\r'))
                 inbuf[--len] = '\0';
-            /* 去除 UTF-8 BOM (EF BB BF) */
             if (len >= 3 && (unsigned char)inbuf[0] == 0xEF
                         && (unsigned char)inbuf[1] == 0xBB
                         && (unsigned char)inbuf[2] == 0xBF) {
-                memmove(inbuf, inbuf + 3, len - 2); /* include '\0' */
+                memmove(inbuf, inbuf + 3, len - 2);
             }
         }
         r.data.str_val = sdvm_heap_strdup(vm, inbuf);
@@ -445,6 +474,16 @@ int sdvm_run(SDVM* vm) {
     vm->sp = -1;
     vm->ip = 0;
     vm->has_error = 0;
+    vm->call_sp = -1;
+
+    /* 初始化主函数的局部变量 */
+    if (vm->func_count > 0) {
+        int main_local_count = (int)vm->func_table[0].local_count;
+        for (int i = 0; i < main_local_count && i < LOCALS_MAX; i++) {
+            vm->locals[i].type = VAL_NULL;
+        }
+        vm->local_count = main_local_count;
+    }
 
     while (vm->ip < vm->code_size) {
         uint8_t op = vm->code[vm->ip++];
@@ -457,6 +496,19 @@ int sdvm_run(SDVM* vm) {
             else if (op == OP_LOAD || op == OP_STORE) printf(" r%u", FETCH_U8());
             else if (op == OP_JMP || op == OP_JIF) printf(" %+d", FETCH_I32());
             else if (op == OP_BIF) printf(" bif:%d args:%d", vm->code[vm->ip], vm->code[vm->ip + 1]);
+            else if (op == OP_CALL) {
+                uint32_t fi = FETCH_U32();
+                uint8_t ac = FETCH_U8();
+                printf(" func:%u args:%u", fi, ac);
+                vm->ip -= 5;
+            } else if (op == OP_ANON) {
+                uint32_t fi = FETCH_U32();
+                printf(" func:%u", fi);
+                vm->ip -= 4;
+            } else if (op == OP_CALLR) {
+                printf(" args:%u", FETCH_U8());
+                vm->ip -= 1;
+            }
             printf("\n");
         }
 
@@ -680,7 +732,6 @@ int sdvm_run(SDVM* vm) {
         case OP_NE: {
             Value b, a;
             POP(b); POP(a);
-            // 复用 EQ 逻辑取反
             int result = 1;
             if (a.type == VAL_INT && b.type == VAL_INT)
                 result = a.data.int_val == b.data.int_val;
@@ -810,12 +861,175 @@ int sdvm_run(SDVM* vm) {
             break;
         }
 
-        case OP_RET:
-            /* 简单的返回：不处理多层调用栈，直接停止 */
-            return 0;
+        case OP_RET: {
+            if (vm->call_sp >= 0) {
+                /* 函数返回: 恢复调用者上下文 */
+                CallFrame* cf = &vm->call_stack[vm->call_sp];
+
+                /* 保存返回值 (如果有，否则为 null) */
+                Value ret_val;
+                if (vm->sp >= 0) {
+                    ret_val = vm->stack[vm->sp];
+                    vm->sp--;
+                } else {
+                    ret_val.type = VAL_NULL;
+                }
+
+                /* 恢复调用者的 locals */
+                memcpy(vm->locals, cf->saved_locals, sizeof(Value) * LOCALS_MAX);
+                vm->local_count = (int)cf->saved_local_count;
+
+                /* 恢复 sp 和 ip */
+                vm->sp = cf->return_sp;
+                vm->ip = cf->return_ip;
+
+                /* 把返回值压回调用者的栈 */
+                vm->sp++;
+                vm->stack[vm->sp] = ret_val;
+
+                vm->call_sp--;
+            } else {
+                /* 顶层返回: 结束程序 */
+                return 0;
+            }
+            break;
+        }
 
         case OP_HALT:
             return 0;
+
+        /* ── 函数调用 ────────────────────────── */
+        case OP_CALL: {
+            uint32_t func_idx = FETCH_U32();
+            ADVANCE(4);
+            uint8_t arg_count = FETCH_U8();
+            ADVANCE(1);
+
+            if (func_idx >= vm->func_count) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "函数索引越界: %u >= %u", func_idx, vm->func_count);
+                vm->has_error = 1; return -1;
+            }
+
+            if (vm->call_sp >= MAX_CALL_DEPTH - 1) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "调用栈溢出");
+                vm->has_error = 1; return -1;
+            }
+
+            FuncEntry* fe = &vm->func_table[func_idx];
+
+            /* 检查参数个数 */
+            if (arg_count != fe->arg_count) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "函数 func[%u] 参数个数不匹配: 期望 %u, 实际 %u",
+                         func_idx, fe->arg_count, arg_count);
+                vm->has_error = 1; return -1;
+            }
+
+            /* 保存调用者上下文 */
+            vm->call_sp++;
+            CallFrame* cf = &vm->call_stack[vm->call_sp];
+            cf->return_ip = vm->ip;
+            cf->return_sp = vm->sp - (int)arg_count;  /* 弹出参数前的位置 */
+            memcpy(cf->saved_locals, vm->locals, sizeof(Value) * LOCALS_MAX);
+            cf->saved_local_count = (uint32_t)vm->local_count;
+
+            /* 从栈拷贝参数到函数局部变量 slot 0..arg_count-1 */
+            int base = vm->sp - (int)arg_count + 1;
+            for (uint32_t i = 0; i < arg_count; i++) {
+                vm->locals[i] = vm->stack[base + i];
+            }
+            /* 清空未被参数填充的局部变量 */
+            for (int i = (int)arg_count; i < (int)fe->local_count && i < LOCALS_MAX; i++) {
+                vm->locals[i].type = VAL_NULL;
+            }
+
+            /* 弹出参数 */
+            vm->sp -= (int)arg_count;
+            vm->local_count = (int)fe->local_count;
+
+            /* 跳转到函数代码 */
+            vm->ip = fe->code_offset;
+            break;
+        }
+
+        case OP_ANON: {
+            uint32_t func_idx = FETCH_U32();
+            ADVANCE(4);
+
+            if (func_idx >= vm->func_count) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "匿名函数索引越界: %u >= %u", func_idx, vm->func_count);
+                vm->has_error = 1; return -1;
+            }
+
+            Value v = { .type = VAL_FUNC, .data.func_idx = func_idx };
+            PUSH(v);
+            break;
+        }
+
+        case OP_CALLR: {
+            uint8_t arg_count = FETCH_U8();
+            ADVANCE(1);
+
+            /* 从栈顶弹出函数引用 */
+            Value func_val;
+            if (vm->sp < 0) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "CALLR: 栈空，找不到函数引用");
+                vm->has_error = 1; return -1;
+            }
+            func_val = vm->stack[vm->sp - (int)arg_count];
+            /* 注意: 函数引用在 args 之下 (callee 先被编译) */
+            if (func_val.type != VAL_FUNC) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "CALLR: 栈顶元素不是函数引用 (type=%d)", func_val.type);
+                vm->has_error = 1; return -1;
+            }
+
+            uint32_t func_idx = func_val.data.func_idx;
+
+            if (func_idx >= vm->func_count) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "CALLR: 函数索引越界: %u >= %u", func_idx, vm->func_count);
+                vm->has_error = 1; return -1;
+            }
+
+            if (vm->call_sp >= MAX_CALL_DEPTH - 1) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "调用栈溢出");
+                vm->has_error = 1; return -1;
+            }
+
+            FuncEntry* fe = &vm->func_table[func_idx];
+
+            if ((uint32_t)arg_count != fe->arg_count) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "CALLR: 参数个数不匹配: 期望 %u, 实际 %u",
+                         fe->arg_count, arg_count);
+                vm->has_error = 1; return -1;
+            }
+
+            /* 保存调用者上下文 */
+            vm->call_sp++;
+            CallFrame* cf = &vm->call_stack[vm->call_sp];
+            cf->return_ip = vm->ip;
+            cf->return_sp = vm->sp - (int)arg_count - 1;
+            memcpy(cf->saved_locals, vm->locals, sizeof(Value) * LOCALS_MAX);
+            cf->saved_local_count = (uint32_t)vm->local_count;
+
+            /* 拷贝参数: func_ref 在 base-1, args 在 base..sp */
+            int base = vm->sp - (int)arg_count + 1;  /* arg0 的位置 */
+            for (uint32_t i = 0; i < arg_count; i++) {
+                vm->locals[i] = vm->stack[base + i];
+            }
+            for (int i = (int)arg_count; i < (int)fe->local_count && i < LOCALS_MAX; i++) {
+                vm->locals[i].type = VAL_NULL;
+            }
+
+            vm->sp -= ((int)arg_count + 1);  /* 移除 func_ref + args */
+            vm->local_count = (int)fe->local_count;
+            vm->ip = fe->code_offset;
+            break;
+        }
 
         /* ── I/O ─────────────────────────────── */
         case OP_PRINT: {

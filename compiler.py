@@ -13,7 +13,7 @@
     1. 导入 star_dance 的 lexer + parser 解析 .star 文件
     2. 遍历 AST 为每个节点发射字节码指令
     3. 写出 .dance 二进制: Magic(4) + Version(4) +
-       StrCount(4) + Strings + CodeSize(4) + Code
+       StrCount(4) + Strings + FuncTable + CodeSize(4) + Code
 """
 
 import struct
@@ -21,7 +21,6 @@ import sys
 import os
 
 # ─── 导入 star_dance 的前端 ──────────────────────
-# 将 star_dance 目录加入 path（与 parser/lexer 自身导入一致，避免模块重复加载）
 _star_dance_path = os.path.join(os.path.dirname(__file__), '..', 'star_dance')
 if os.path.isdir(_star_dance_path):
     sys.path.insert(0, _star_dance_path)
@@ -38,7 +37,8 @@ try:
         BreakStmt, ContinueStmt, CutDownStmt,
         BinaryOp, UnaryOp, Literal, Identifier,
         CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt,
-        ListLiteral, NewExpr, GetAttr, ThrowStmt, TryStmt
+        ListLiteral, NewExpr, GetAttr, ThrowStmt, TryStmt,
+        AnonymouFunc, NamedArgument,
     )
     from tokens import Token
 except ImportError as e:
@@ -91,6 +91,11 @@ OP_BIF     = 0x42  # +1: bif_idx, +1: argc
 OP_RET     = 0x43
 OP_HALT    = 0x44
 
+# 函数 0x50-0x5F
+OP_CALL    = 0x50  # +4: func_idx, +1: arg_count (编译时已知的函数)
+OP_ANON    = 0x51  # +4: func_idx (推送函数引用)
+OP_CALLR   = 0x52  # +1: arg_count (从栈顶弹出函数引用并调用)
+
 # I/O 0x70-0x7F
 OP_PRINT   = 0x70
 OP_SCAN    = 0x71
@@ -106,7 +111,6 @@ BIF_ID     = 6
 BIF_LEN    = 7
 BIF_INSERT = 8
 
-# 内置函数名 → BIF 索引映射
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -128,27 +132,79 @@ class CompileError(Exception):
 class BackpatchEntry:
     """回填记录"""
     def __init__(self, offset_pos: int, target_label: str):
-        self.offset_pos = offset_pos   # 字节码中存放偏移量的位置
-        self.target_label = target_label  # 目标标签
+        self.offset_pos = offset_pos
+        self.target_label = target_label
+
+
+class FuncDef:
+    """函数定义"""
+    def __init__(self, name, param_names, body, is_anonymous=False):
+        self.name = name           # str | None (匿名为 None)
+        self.param_names = list(param_names)  # 参数名列表（按顺序）
+        self.body = body           # list[ASTNode]
+        self.is_anonymous = is_anonymous
+        
+        # 编译上下文
+        self.code = bytearray()
+        # 参数占据 slots 0..n-1
+        self.locals = {p: i for i, p in enumerate(param_names)}
+        self.next_local = len(param_names)
+        self.labels = {}
+        self.backpatches = []
+        self.loop_labels = []
+        self.code_offset = 0  # 最终布局时填入
 
 
 class Compiler:
     """.star → .dance 编译器"""
 
     def __init__(self):
-        self.code = bytearray()          # 字节码缓冲区
+        self.code = bytearray()          # 主代码（main）字节码
         self.strpool = []                # 字符串常量池
         self.strpool_map = {}            # 字符串 → 索引
-        self.locals = {}                 # 变量名 → slot 索引
-        self.next_local = 0              # 下一个局部变量槽
-        self.labels = {}                 # 标签名 → 字节码位置
-        self.backpatches = []            # 待回填的列表
-        self.loop_labels = []            # 循环标签栈（break/continue）
+        self.locals = {}                 # main 的变量名 → slot
+        self.next_local = 0              # main 的下一个变量槽
+        self.labels = {}                 # main 的标签 → 位置
+        self.backpatches = []            # main 的待回填列表
+        self.loop_labels = []            # main 的循环标签栈
         self.errors = 0                  # 编译错误计数
+        
+        # 函数表
+        self.func_defs = []              # list[FuncDef] (index 0 = main)
+        self.func_map = {}               # name → index in func_defs
+        self._saved_ctx = None           # 函数上下文切换时使用
+
+    # ─── 上下文切换 ────────────────────────────
+    def _push_func_context(self, func):
+        """切换到函数的编译上下文"""
+        self._saved_ctx = (
+            self.code, self.locals, self.next_local,
+            self.labels, self.backpatches, self.loop_labels
+        )
+        self.code = func.code
+        self.locals = func.locals
+        self.next_local = func.next_local
+        self.labels = func.labels
+        self.backpatches = func.backpatches
+        self.loop_labels = func.loop_labels
+
+    def _pop_func_context(self, func):
+        """恢复主函数的编译上下文，保存函数状态"""
+        # 保存函数的最终状态
+        func.code = self.code
+        func.locals = self.locals
+        func.next_local = self.next_local
+        func.labels = self.labels
+        func.backpatches = func.backpatches
+        func.loop_labels = func.loop_labels
+        
+        # 恢复主上下文
+        (self.code, self.locals, self.next_local,
+         self.labels, self.backpatches, self.loop_labels) = self._saved_ctx
+        self._saved_ctx = None
 
     # ─── 字符串常量池 ────────────────────────────
     def add_string(self, s: str) -> int:
-        """向常量池添加字符串，返回索引"""
         if s not in self.strpool_map:
             idx = len(self.strpool)
             self.strpool.append(s)
@@ -158,14 +214,12 @@ class Compiler:
 
     # ─── 局部变量 ───────────────────────────────
     def alloc_local(self, name: str) -> int:
-        """分配局部变量槽，返回索引"""
         if name not in self.locals:
             self.locals[name] = self.next_local
             self.next_local += 1
         return self.locals[name]
 
     def get_local(self, name: str) -> int:
-        """获取变量索引"""
         if name not in self.locals:
             raise CompileError(f"变量 '{name}' 未声明")
         return self.locals[name]
@@ -191,25 +245,50 @@ class Compiler:
 
     # ─── 标签 / 回填 ────────────────────────────
     def define_label(self, name: str):
-        """定义标签指向当前位置"""
         self.labels[name] = self.get_pos()
 
     def add_backpatch(self, offset_pos: int, target_label: str):
-        """记录一个需要回填的跳转偏移"""
         self.backpatches.append(BackpatchEntry(offset_pos, target_label))
 
     def resolve_backpatches(self):
-        """解析所有回填"""
         for bp in self.backpatches:
             if bp.target_label not in self.labels:
                 raise CompileError(f"标签 '{bp.target_label}' 未定义")
             target = self.labels[bp.target_label]
-            offset = target - (bp.offset_pos + 4)  # 相对下一条指令的偏移
-            # 写入偏移量
+            offset = target - (bp.offset_pos + 4)
             self.code[bp.offset_pos:bp.offset_pos+4] = struct.pack('<i', offset)
 
+    def _has_return_in_body(self, body) -> bool:
+        """递归检查语句列表中是否包含 return 语句"""
+        for stmt in body:
+            if isinstance(stmt, ReturnStmt):
+                return True
+            if isinstance(stmt, Block):
+                if self._has_return_in_body(stmt.statements):
+                    return True
+            if isinstance(stmt, IfStmt):
+                if self._has_return_in_body(stmt.then_block):
+                    return True
+                if stmt.else_block and self._has_return_in_body(stmt.else_block):
+                    return True
+            if isinstance(stmt, WhileStmt):
+                if self._has_return_in_body(stmt.body):
+                    return True
+            if isinstance(stmt, ForStmt):
+                if self._has_return_in_body(stmt.body):
+                    return True
+            if isinstance(stmt, ForeachStmt):
+                if self._has_return_in_body(stmt.body):
+                    return True
+            if isinstance(stmt, CaseStmt):
+                for wc in stmt.when_clauses:
+                    if self._has_return_in_body(wc.body):
+                        return True
+                if self._has_return_in_body(stmt.else_body):
+                    return True
+        return False
+
     def _flatten_body(self, body):
-        """展开语句体，支持 [Block(...)] 或 [Stmt, Stmt, ...]"""
         stmts = []
         for s in body:
             if isinstance(s, Block):
@@ -219,7 +298,6 @@ class Compiler:
         return stmts
 
     def _compile_body(self, body):
-        """编译语句列表（自动展开 Block）"""
         for s in self._flatten_body(body):
             self.compile_statement(s)
 
@@ -229,19 +307,43 @@ class Compiler:
         self.errors = 0
         
         try:
-            # 先编译 start 块（常量/初始值设定），让变量先分配
+            # 0. 收集模块级函数声明并验证
+            func_index = 1  # index 0 是 main
+            for decl in ast.func_decls:
+                # 验证函数必须包含 return() 语句
+                if not self._has_return_in_body(decl.body):
+                    raise CompileError(
+                        f"函数 '{decl.name}' 缺少 return() 语句 — "
+                        f"所有模块级 thing（函数）必须有 return() 语句，即使只是 return(null);"
+                    )
+                func = FuncDef(decl.name, decl.params, decl.body)
+                self.func_defs.append(func)
+                self.func_map[decl.name] = func_index
+                func_index += 1
+            
+            # 1. 先编译 start 块
             if ast.start_block:
                 self._compile_body(ast.start_block.statements)
             
-            # 再编译 main 块中的语句
+            # 2. 再编译 main 块
             if ast.main_block:
                 self._compile_body(ast.main_block.statements)
             
-            # 最后 halt
+            # 3. HALT 结束主代码
             self.emit(OP_HALT)
             
-            # 解析回填
+            # 4. 解析主代码回填
             self.resolve_backpatches()
+            
+            # 5. 编译各个函数
+            for func in self.func_defs:
+                self._push_func_context(func)
+                self._compile_body(func.body)
+                # 函数末尾自动添加 return(null) 确保函数有返回值
+                self.emit(OP_NULL)
+                self.emit(OP_RET)
+                self.resolve_backpatches()
+                self._pop_func_context(func)
 
         except CompileError as e:
             print(f"[编译错误] {e}")
@@ -252,7 +354,7 @@ class Compiler:
         if isinstance(stmt, VarDecl):
             self.compile_var_decl(stmt)
         elif isinstance(stmt, ConstDecl):
-            self.compile_var_decl(stmt)  # ConstDecl 和 VarDecl 编译方式相同
+            self.compile_var_decl(stmt)
         elif isinstance(stmt, Assign):
             self.compile_assign(stmt)
         elif isinstance(stmt, SeeStmt):
@@ -272,19 +374,17 @@ class Compiler:
         elif isinstance(stmt, CutDownStmt):
             self.compile_cutdown(stmt)
         elif isinstance(stmt, ExprStmt):
-            # 处理赋值表达式 i = i + 1 → 编译为 STORE
             if isinstance(stmt.expr, Assign):
                 self.compile_assign(stmt.expr)
             else:
                 self.compile_expression(stmt.expr)
-                self.emit(OP_POP)  # 丢弃表达式结果
+                self.emit(OP_POP)
         elif isinstance(stmt, ReturnStmt):
             if stmt.value:
                 self.compile_expression(stmt.value)
             self.emit(OP_RET)
         elif isinstance(stmt, (LifeDecl, ThingDecl)):
-            # Life/Thing 声明在 v1 中暂不支持编译
-            pass  # 直接跳过，不自持编译
+            pass  # 方法声明暂不支持
         elif isinstance(stmt, ThrowStmt):
             raise CompileError("try/throw 暂不支持编译到 .dance")
         elif isinstance(stmt, TryStmt):
@@ -294,19 +394,16 @@ class Compiler:
         else:
             raise CompileError(f"不支持的语句类型: {type(stmt).__name__}")
 
-    def compile_var_decl(self, stmt: VarDecl):
-        """变量声明: int a = expr; → compile(expr) + STORE"""
+    def compile_var_decl(self, stmt):
         slot = self.alloc_local(stmt.name)
         if stmt.initializer:
             self.compile_expression(stmt.initializer)
         else:
-            # 无初始化值 → 默认值 null
             self.emit(OP_NULL)
         self.emit(OP_STORE)
         self.emit_u8(slot)
 
-    def compile_assign(self, stmt: Assign):
-        """赋值: target = expr;"""
+    def compile_assign(self, stmt):
         if isinstance(stmt.target, Identifier):
             slot = self.get_local(stmt.target.name)
             self.compile_expression(stmt.value)
@@ -315,150 +412,93 @@ class Compiler:
         else:
             raise CompileError(f"不支持的赋值目标: {type(stmt.target).__name__}")
 
-    def compile_see(self, stmt: SeeStmt):
-        """see(expr, ...)"""
+    def compile_see(self, stmt):
         for arg in stmt.args:
             self.compile_expression(arg)
         self.emit(OP_BIF)
         self.emit_u8(BIF_SEE)
         self.emit_u8(len(stmt.args))
 
-    def compile_if(self, stmt: IfStmt):
-        """if(cond) { then } else { else }
-        
-        生成:
-            compile(cond)
-            JIF else_label
-            compile(then)
-            JMP end_label
-        else_label:
-            compile(else)
-        end_label:
-        """
-        # 条件
+    def compile_if(self, stmt):
         self.compile_expression(stmt.condition)
-        
         else_label = f"_if_else_{self.get_pos()}"
         end_label = f"_if_end_{self.get_pos()}"
-        
-        # JIF 到 else 分支
         self.emit(OP_JIF)
         jif_pos = self.get_pos()
-        self.emit_i32(0)  # placeholder
+        self.emit_i32(0)
         self.add_backpatch(jif_pos, else_label)
-        
-        # then 分支
         self._compile_body(stmt.then_block)
-        
         if stmt.else_block:
-            # JMP 跳过 else
             self.emit(OP_JMP)
             jmp_pos = self.get_pos()
-            self.emit_i32(0)  # placeholder
+            self.emit_i32(0)
             self.add_backpatch(jmp_pos, end_label)
-        
         self.define_label(else_label)
-        
         if stmt.else_block:
             self._compile_body(stmt.else_block)
             self.define_label(end_label)
 
-    def compile_while(self, stmt: WhileStmt):
-        """while(cond) { body }
-        
-        生成:
-        loop_start:
-            compile(cond)
-            JIF end_label
-            compile(body)
-            JMP loop_start
-        end_label:
-        """
+    def compile_while(self, stmt):
         loop_start = f"_while_start_{self.get_pos()}"
         end_label = f"_while_end_{self.get_pos()}"
-        
         self.loop_labels.append((loop_start, end_label))
         self.define_label(loop_start)
-        
         self.compile_expression(stmt.condition)
-        
         self.emit(OP_JIF)
         jif_pos = self.get_pos()
         self.emit_i32(0)
         self.add_backpatch(jif_pos, end_label)
-        
         self._compile_body(stmt.body)
-        
         self.emit(OP_JMP)
         jmp_pos2 = self.get_pos()
         self.emit_i32(0)
-        # 跳回 loop_start
         target = self.labels[loop_start]
         offset = target - (jmp_pos2 + 4)
         self.code[jmp_pos2:jmp_pos2+4] = struct.pack('<i', offset)
-        
         self.define_label(end_label)
         self.loop_labels.pop()
 
-    def compile_for(self, stmt: ForStmt):
-        """for(init; cond; update) { body }"""
+    def compile_for(self, stmt):
         loop_start = f"_for_start_{self.get_pos()}"
         check_label = f"_for_check_{self.get_pos()}"
         end_label = f"_for_end_{self.get_pos()}"
-        
         if stmt.init:
             self.compile_statement(stmt.init)
-        
         self.loop_labels.append((check_label, end_label))
         self.define_label(check_label)
-        
-        # 条件
         if stmt.condition:
             self.compile_expression(stmt.condition)
         else:
-            # 无条件 → 永远 true
             self.emit(OP_BCONST)
             self.emit_u8(1)
-        
         self.emit(OP_JIF)
         jif_pos = self.get_pos()
         self.emit_i32(0)
         self.add_backpatch(jif_pos, end_label)
-        
         self._compile_body(stmt.body)
-        
         self.define_label(loop_start)
-        
         if stmt.update:
             if isinstance(stmt.update, Assign):
                 self.compile_assign(stmt.update)
-                # compile_assign 已经消费了栈值（STORE），不需要 POP
             elif isinstance(stmt.update, ExprStmt):
                 self.compile_expression(stmt.update.expr)
                 self.emit(OP_POP)
             else:
                 self.compile_expression(stmt.update)
                 self.emit(OP_POP)
-        
         self.emit(OP_JMP)
         jmp_pos = self.get_pos()
         self.emit_i32(0)
         target = self.labels[check_label]
         offset = target - (jmp_pos + 4)
         self.code[jmp_pos:jmp_pos+4] = struct.pack('<i', offset)
-        
         self.define_label(end_label)
         self.loop_labels.pop()
 
-    def compile_foreach(self, stmt: ForeachStmt):
-        """foreach var in iterable { body }
-        
-        简化实现: 限于 int/float 的可迭代对象
-        实际 v1 用 for 循环代替
-        """
+    def compile_foreach(self, stmt):
         raise CompileError("foreach 暂不支持编译到 .dance，请使用 for 循环替代")
 
-    def compile_break(self, stmt: BreakStmt):
+    def compile_break(self, stmt):
         if not self.loop_labels:
             raise CompileError("break 只能在循环中使用")
         _, end_label = self.loop_labels[-1]
@@ -467,7 +507,7 @@ class Compiler:
         self.emit_i32(0)
         self.add_backpatch(jmp_pos, end_label)
 
-    def compile_continue(self, stmt: ContinueStmt):
+    def compile_continue(self, stmt):
         if not self.loop_labels:
             raise CompileError("continue 只能在循环中使用")
         loop_start, _ = self.loop_labels[-1]
@@ -476,71 +516,48 @@ class Compiler:
         self.emit_i32(0)
         self.add_backpatch(jmp_pos, loop_start)
 
-    def compile_cutdown(self, stmt: CutDownStmt):
-        """cutdown → 跳转到最外层循环的 end_label"""
+    def compile_cutdown(self, stmt):
         if not self.loop_labels:
             raise CompileError("cutdown 只能在循环中使用")
-        _, end_label = self.loop_labels[0]  # 最外层
+        _, end_label = self.loop_labels[0]
         self.emit(OP_JMP)
         jmp_pos = self.get_pos()
         self.emit_i32(0)
         self.add_backpatch(jmp_pos, end_label)
 
-    def compile_case(self, stmt: CaseStmt):
-        """case(expr) { when val { body } else { body } }
-        
-        简化为链式 if-else:
-            compile(expr) → temp %slot
-            temp == when1 ? → body1
-            temp == when2 ? → body2
-            ...
-            else_body
-        """
-        # 分配临时槽存放 expr
+    def compile_case(self, stmt):
         case_slot = self.next_local
         self.next_local += 1
-        
         self.compile_expression(stmt.expr)
         self.emit(OP_STORE)
         self.emit_u8(case_slot)
-        
         next_labels = []
         end_label = f"_case_end_{self.get_pos()}"
-        
         for i, wc in enumerate(stmt.when_clauses):
             next_label = f"_case_next_{self.get_pos()}_{i}"
             next_labels.append(next_label)
-            
             self.emit(OP_LOAD)
             self.emit_u8(case_slot)
             self.compile_expression(wc.value)
             self.emit(OP_EQ)
-            
             self.emit(OP_JIF)
             jif_pos = self.get_pos()
             self.emit_i32(0)
             self.add_backpatch(jif_pos, next_label)
-            
             for s in wc.body:
                 self.compile_statement(s)
-            
             self.emit(OP_JMP)
             jmp_pos = self.get_pos()
             self.emit_i32(0)
             self.add_backpatch(jmp_pos, end_label)
-            
             self.define_label(next_label)
-        
-        # else 分支
         for s in stmt.else_body:
             self.compile_statement(s)
-        
         self.define_label(end_label)
-        self.next_local -= 1  # 释放临时槽
+        self.next_local -= 1
 
     # ─── 表达式编译 ─────────────────────────────
     def compile_expression(self, expr):
-        """编译表达式，结果留在栈顶"""
         if isinstance(expr, Literal):
             self.compile_literal(expr)
         elif isinstance(expr, Identifier):
@@ -551,6 +568,8 @@ class Compiler:
             self.compile_unary(expr)
         elif isinstance(expr, CallExpr):
             self.compile_call(expr)
+        elif isinstance(expr, AnonymouFunc):
+            self.compile_anonymou(expr)
         elif isinstance(expr, ListLiteral):
             raise CompileError("列表字面量暂不支持编译")
         elif isinstance(expr, NewExpr):
@@ -560,7 +579,7 @@ class Compiler:
         else:
             raise CompileError(f"不支持的表达式: {type(expr).__name__}")
 
-    def compile_literal(self, expr: Literal):
+    def compile_literal(self, expr):
         val = expr.value
         if val is True:
             self.emit(OP_BCONST)
@@ -583,88 +602,42 @@ class Compiler:
         else:
             raise CompileError(f"不支持的字面量: {val!r}")
 
-    def compile_identifier(self, expr: Identifier):
+    def compile_identifier(self, expr):
         slot = self.get_local(expr.name)
         self.emit(OP_LOAD)
         self.emit_u8(slot)
 
-    def compile_binary(self, expr: BinaryOp):
-        """二元运算"""
+    def compile_binary(self, expr):
         op = expr.op
-
-        # 逻辑运算符 (惰性求值)
         if op == '&&' or op == '||':
             self.compile_logical(expr)
             return
-
-        # 正常的二元运算
         self.compile_expression(expr.left)
         self.compile_expression(expr.right)
-
         op_map = {
             '+': OP_ADD, '-': OP_SUB, '*': OP_MUL, '/': OP_DIV,
             '%': OP_MOD,
             '==': OP_EQ, '!=': OP_NE, '<': OP_LT, '>': OP_GT,
             '<=': OP_LE, '>=': OP_GE,
-            '===': OP_EQ,  # 严格等于 → 在 SDVM 中 same as == (值比较)
-            '!>': OP_LE,   # 不大于 → <=
-            '!<': OP_GE,   # 不小于 → >=
-            # 位运算: 用 ICONST/FCONST + arithmetic 简化，
-            # 实际的位运算在 v2 支持
+            '===': OP_EQ,
+            '!>': OP_LE, '!<': OP_GE,
             '<<': None, '>>': None, '>>>': None, '<<<': None,
             '&': None, '|': None,
         }
-
         if op in op_map:
             bytecode = op_map[op]
             if bytecode is not None:
                 self.emit(bytecode)
             else:
-                # 位运算: 转为 int 后用 Python 运算
-                if op == '<<':
-                    # 暂不支持，用加法模拟 (v1 简化)
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
-                elif op == '>>':
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
-                elif op == '>>>':
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
-                elif op == '<<<':
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
-                elif op == '&':
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
-                elif op == '|':
-                    raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
+                raise CompileError(f"位运算 '{op}' 暂不支持编译到 .dance")
         else:
             raise CompileError(f"不支持的运算符: {op}")
 
-    def compile_logical(self, expr: BinaryOp):
-        """惰性求值的逻辑运算
-        
-        a && b:
-            compile(a)
-            DUP
-            JIF end        ; a is false → result is a (false)
-            POP            ; a is true → discard
-            compile(b)     ; result is b
-        end:
-        
-        a || b:
-            compile(a)
-            DUP
-            JIF use_b      ; a is false → need to check b
-            JMP end        ; a is true → result is a (true), skip
-        use_b:
-            POP            ; drop false a
-            compile(b)
-        end:
-        """
+    def compile_logical(self, expr):
         end_label = f"_logical_end_{self.get_pos()}"
-        
         self.compile_expression(expr.left)
         self.emit(OP_DUP)
-        
         if expr.op == '&&':
-            # a is false → end (result = false). a is true → POP + compile(b)
             self.emit(OP_JIF)
             jif_pos = self.get_pos()
             self.emit_i32(0)
@@ -672,7 +645,6 @@ class Compiler:
             self.emit(OP_POP)
             self.compile_expression(expr.right)
         elif expr.op == '||':
-            # a is false → go to use_b. a is true → JMP to end
             use_b_label = f"_logical_use_b_{self.get_pos()}"
             self.emit(OP_JIF)
             jif_pos = self.get_pos()
@@ -685,24 +657,18 @@ class Compiler:
             self.define_label(use_b_label)
             self.emit(OP_POP)
             self.compile_expression(expr.right)
-        
         self.define_label(end_label)
 
-    def compile_unary(self, expr: UnaryOp):
-        """一元运算"""
+    def compile_unary(self, expr):
         self.compile_expression(expr.operand)
-        
         if expr.op == '-':
             self.emit(OP_NEG)
         elif expr.op == '!':
             self.emit(OP_NOT)
         elif expr.op == '++':
-            # i++ → LOAD, DUP, ICONST 1, ADD, STORE (结果用原值)
-            # ++i → LOAD, ICONST 1, ADD, DUP, STORE (结果用新值)
             if isinstance(expr.operand, Identifier):
                 slot = self.get_local(expr.operand.name)
                 if expr.is_prefix:
-                    # ++i: 先加载，加1，存回，结果留栈
                     self.emit(OP_LOAD)
                     self.emit_u8(slot)
                     self.emit(OP_ICONST)
@@ -712,7 +678,6 @@ class Compiler:
                     self.emit(OP_STORE)
                     self.emit_u8(slot)
                 else:
-                    # i++: 先加载（保留副本），加1，存回，原始值在栈
                     self.emit(OP_LOAD)
                     self.emit_u8(slot)
                     self.emit(OP_DUP)
@@ -749,32 +714,109 @@ class Compiler:
         else:
             raise CompileError(f"不支持的一元运算符: {expr.op}")
 
-    def compile_call(self, expr: CallExpr):
-        """函数调用
+    def _resolve_call_args(self, param_names, args):
+        """将调用参数映射到函数参数槽位，返回按槽位顺序排列的表达式列表"""
+        named_args = {}
+        positional_args = []
+        for arg in args:
+            if isinstance(arg, NamedArgument):
+                if arg.name in named_args:
+                    raise CompileError(f"重复的命名参数 '{arg.name}'")
+                named_args[arg.name] = arg.value
+            else:
+                positional_args.append(arg)
         
-        内置函数: BIF 指令
-        普通函数: 暂不支持 (v1 只支持内置函数)
-        """
+        if len(positional_args) > len(param_names):
+            raise CompileError(f"参数过多: 期望 {len(param_names)} 个，实际 {len(positional_args)} 个位置参数")
+        
+        ordered = [None] * len(param_names)
+        used = set()
+        
+        # 位置参数按顺序
+        for i, expr in enumerate(positional_args):
+            ordered[i] = expr
+            used.add(i)
+            # 同时检查是否也有同名的命名参数
+            if i < len(param_names) and param_names[i] in named_args:
+                raise CompileError(f"参数 '{param_names[i]}' 同时被位置参数和命名参数指定")
+        
+        # 命名参数按名映射
+        for name, expr in named_args.items():
+            if name not in param_names:
+                raise CompileError(f"命名参数 '{name}' 不是函数参数 (可选: {param_names})")
+            slot = param_names.index(name)
+            if slot in used:
+                raise CompileError(f"参数 '{name}' (slot {slot}) 已被赋值")
+            ordered[slot] = expr
+            used.add(slot)
+        
+        # 检查是否所有参数都填满
+        for i, expr in enumerate(ordered):
+            if expr is None:
+                raise CompileError(f"缺少参数 '{param_names[i]}'")
+        
+        return ordered
+
+    def compile_call(self, expr: CallExpr):
         if isinstance(expr.callee, Identifier):
             name = expr.callee.name
             
             if name in BIF_MAP:
                 bif_idx = BIF_MAP[name]
-                # 编译参数
                 for arg in expr.args:
                     self.compile_expression(arg)
                 self.emit(OP_BIF)
                 self.emit_u8(bif_idx)
                 self.emit_u8(len(expr.args))
+            elif name in self.func_map:
+                func_idx = self.func_map[name]
+                func = self.func_defs[func_idx - 1]
+                ordered_exprs = self._resolve_call_args(func.param_names, expr.args)
+                for arg_expr in ordered_exprs:
+                    self.compile_expression(arg_expr)
+                self.emit(OP_CALL)
+                self.emit_u32(func_idx)  # 函数索引
+                self.emit_u8(len(func.param_names))  # 参数个数
             else:
-                raise CompileError(f"函数 '{name}' 未定义 (v1 只支持内置函数)")
+                # 可能是一个变量（匿名函数引用），使用 OP_CALLR
+                self.compile_expression(expr.callee)  # 编译变量名 → 加载函数引用
+                for arg in expr.args:
+                    self.compile_expression(arg)
+                self.emit(OP_CALLR)
+                self.emit_u8(len(expr.args))
+        elif isinstance(expr.callee, AnonymouFunc):
+            # 直接调用匿名函数：anonymou(x,y){...}(1,2)
+            # 需要先处理匿名函数（添加到 func_defs），然后 OP_CALL
+            anon_func = expr.callee
+            anon_idx = self._add_anonymous_func(anon_func)
+            ordered_exprs = self._resolve_call_args(anon_func.params, expr.args)
+            for arg_expr in ordered_exprs:
+                self.compile_expression(arg_expr)
+            self.emit(OP_CALL)
+            self.emit_u32(anon_idx)
+            self.emit_u8(len(anon_func.params))
         else:
-            raise CompileError("暂不支持方法调用编译")
+            # 复杂 callee 表达式 → 编译 callee 产生函数引用，然后 OP_CALLR
+            self.compile_expression(expr.callee)
+            for arg in expr.args:
+                self.compile_expression(arg)
+            self.emit(OP_CALLR)
+            self.emit_u8(len(expr.args))
+
+    def _add_anonymous_func(self, anon_expr):
+        """将匿名函数添加到函数表，返回函数索引"""
+        func = FuncDef(None, anon_expr.params, anon_expr.body, is_anonymous=True)
+        self.func_defs.append(func)
+        return len(self.func_defs)  # 注意：func 0 = main, 所以 index = len(func_defs)
+
+    def compile_anonymou(self, expr: AnonymouFunc):
+        """编译匿名函数表达式 (推送函数引用到栈)"""
+        func_idx = self._add_anonymous_func(expr)
+        self.emit(OP_ANON)
+        self.emit_u32(func_idx)
 
     # ─── 输出 ───────────────────────────────────
     def write_dance(self, path: str):
-        """写出 .dance 二进制文件"""
-        # 检查是否有错误
         if self.errors > 0:
             print(f"编译失败: {self.errors} 个错误")
             return False
@@ -783,25 +825,78 @@ class Compiler:
             # Magic: "SDNC"
             f.write(b'SDNC')
             
-            # Version: 1
-            f.write(struct.pack('<I', 1))
+            # Version: 2 (支持函数表)
+            f.write(struct.pack('<I', 2))
             
-            # StrCount
+            # StrCount + Strings
             f.write(struct.pack('<I', len(self.strpool)))
-            
-            # Strings
             for s in self.strpool:
                 encoded = s.encode('utf-8')
                 f.write(struct.pack('<I', len(encoded)))
                 f.write(encoded)
             
-            # CodeSize + Code
-            f.write(struct.pack('<I', len(self.code)))
+            # FuncCount (函数数量，含 main)
+            # func_defs 包含所有用户定义函数
+            # main 代码作为 func 0
+            total_funcs = 1 + len(self.func_defs)  # main + user funcs
+            
+            # 计算代码偏移：先收集所有代码块
+            code_blocks = []
+            code_blocks.append(bytes(self.code))  # block 0 = main code
+            
+            # 编译各函数代码（可能已在上一步编译完成）
+            func_code_list = []
+            for func in self.func_defs:
+                func_code_list.append(bytes(func.code))
+            
+            # 计算每个函数的 code_offset（相对于 CodeData 起始位置）
+            current_offset = 0
+            main_code_size = len(self.code)
+            
+            # main 的偏移量永远是 0
+            self.main_code_offset = 0
+            
+            current_offset += main_code_size
+            for i, func in enumerate(self.func_defs):
+                func.code_offset = current_offset
+                current_offset += len(func.code)
+            
+            total_code_size = current_offset
+            
+            # 写出 FuncCount
+            f.write(struct.pack('<I', total_funcs))
+            
+            # 写出 FuncTable
+            # func 0: main
+            f.write(struct.pack('<I', 0xFFFFFFFF))  # name_idx = -1 (main 不用字符串索引)
+            f.write(struct.pack('<I', 0))            # arg_count = 0
+            f.write(struct.pack('<I', self.next_local))  # local_count
+            f.write(struct.pack('<I', 0))            # code_offset = 0
+            
+            # user funcs
+            for func in self.func_defs:
+                if func.name is not None:
+                    name_idx = self.add_string(func.name)
+                else:
+                    name_idx = 0xFFFFFFFF  # 匿名
+                f.write(struct.pack('<I', name_idx))
+                f.write(struct.pack('<I', len(func.param_names)))  # arg_count
+                f.write(struct.pack('<I', func.next_local))  # local_count
+                f.write(struct.pack('<I', func.code_offset))
+
+            # CodeSize
+            f.write(struct.pack('<I', total_code_size))
+            
+            # CodeData: main code + all func codes
             f.write(bytes(self.code))
+            for func in self.func_defs:
+                f.write(bytes(func.code))
         
+        total_funcs_output = 1 + len(self.func_defs)
         print(f"编译成功: {path}")
         print(f"  字符串常量: {len(self.strpool)}")
-        print(f"  字节码大小: {len(self.code)} bytes")
+        print(f"  函数: {total_funcs_output} (main + {len(self.func_defs)} user)")
+        print(f"  字节码大小: {total_code_size} bytes (主代码: {len(self.code)})")
         print(f"  局部变量: {self.next_local}")
         return True
 
@@ -824,11 +919,9 @@ def main():
         print(f"错误: 文件 '{input_path}' 不存在")
         return 1
     
-    # 读取源码
     with open(input_path, 'r', encoding='utf-8') as f:
         source = f.read()
     
-    # 词法分析
     try:
         lexer = Lexer(source)
         tokens = lexer.tokenize()
@@ -836,7 +929,6 @@ def main():
         print(f"[词法错误] {e}")
         return 1
     
-    # 语法分析
     try:
         parser_obj = Parser(tokens)
         ast = parser_obj.parse()
@@ -844,14 +936,12 @@ def main():
         print(f"[语法错误] {e}")
         return 1
     
-    # 编译
     compiler = Compiler()
     compiler.compile(ast)
     
     if compiler.errors > 0:
         return 1
     
-    # 输出路径
     output_path = args.output
     if not output_path:
         base = os.path.splitext(input_path)[0]

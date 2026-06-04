@@ -2,6 +2,7 @@
  * ═══════════════════════════════════════════════
  *  SDVM — 星舞虚拟机 (Star Dance Virtual Machine)
  *  类 JVM 栈式虚拟机，执行 .dance 字节码
+ *  版本 2: 支持函数调用 + 匿名函数
  * ═══════════════════════════════════════════════
  */
 
@@ -50,8 +51,13 @@ extern "C" {
    │ JMP i4      │ +4   │ 无条件跳转(相对偏移)       │
    │ JIF i4      │ +4   │ false 时跳转              │
    │ BIF b1 b1   │ +2   │ 调用内置函数(索引+参数数) │
-   │ RET          │ -    │ 返回                      │
+   │ RET          │ -    │ 返回/函数返回             │
    │ HALT         │ -    │ 停止执行                  │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 函数调用     │      │                          │
+   │ CALL i4 b1  │ +5   │ 调用已命名的函数           │
+   │ ANON i4     │ +4   │ 推送匿名函数引用           │
+   │ CALLR b1    │ +1   │ 动态调用(栈顶为函数引用)  │
    │─────────────┼──────┼──────────────────────────┤
    │ I/O          │      │                          │
    │ PRINT        │ -    │ 弹出并打印                │
@@ -100,6 +106,11 @@ typedef enum {
     OP_RET       = 0x43,
     OP_HALT      = 0x44,
 
+    /* 函数调用 0x50-0x5F */
+    OP_CALL      = 0x50,   /* +4: func_idx, +1: arg_count */
+    OP_ANON      = 0x51,   /* +4: func_idx (push function reference) */
+    OP_CALLR     = 0x52,   /* +1: arg_count (dynamic call via stack) */
+
     /* I/O 0x70-0x7F */
     OP_PRINT     = 0x70,
     OP_SCAN      = 0x71,
@@ -131,28 +142,50 @@ typedef enum {
     VAL_BOOL,
     VAL_STRING,    /* owned by const pool OR dynamically allocated */
     VAL_NULL,
+    VAL_FUNC,      /* 函数引用 (用于匿名字面量) */
 } ValueType;
 
 typedef struct {
     ValueType type;
     union {
-        int64_t   int_val;
-        double    float_val;
-        uint8_t   bool_val;
+        int64_t     int_val;
+        double      float_val;
+        uint8_t     bool_val;
         const char* str_val;
+        uint32_t    func_idx;  /* 用于 VAL_FUNC */
     } data;
 } Value;
 
 /* ═══════════════════════════════════════════════
-   SDVM 虚拟机实例
+   大小常量
    ═══════════════════════════════════════════════ */
 #define STACK_MAX   4096
 #define LOCALS_MAX  256
 #define STRPOOL_MAX 4096
 #define CODE_MAX   (1024 * 64)    /* 最大字节码 64KB */
 
+/* ═══════════════════════════════════════════════
+   函数表 & 调用栈
+   ═══════════════════════════════════════════════ */
+#define MAX_FUNCS      256
+#define MAX_CALL_DEPTH 64
+
 typedef struct {
-    uint8_t*  code;           /* 字节码缓冲区 */
+    uint32_t name_idx;      /* 字符串池索引，0xFFFFFFFF = 匿名 */
+    uint32_t arg_count;     /* 参数个数 */
+    uint32_t local_count;   /* 局部变量数 (含参数) */
+    uint32_t code_offset;   /* 在 code 中的偏移量 */
+} FuncEntry;
+
+typedef struct {
+    uint32_t  return_ip;    /* 返回后继续执行的 IP */
+    int       return_sp;    /* 返回后恢复的 SP */
+    Value     saved_locals[LOCALS_MAX];  /* 调用者的局部变量备份 */
+    uint32_t  saved_local_count;        /* 调用者的 local_count */
+} CallFrame;
+
+typedef struct {
+    uint8_t*  code;           /* 字节码缓冲区 (主代码 + 所有函数代码) */
     uint32_t  code_size;      /* 字节码大小 */
 
     char**    strpool;        /* 字符串常量池 */
@@ -174,6 +207,14 @@ typedef struct {
     char**    heap_strs;
     uint32_t  heap_str_count;
     uint32_t  heap_str_cap;
+
+    /* 函数表 */
+    FuncEntry func_table[MAX_FUNCS];
+    uint32_t  func_count;
+
+    /* 调用栈 */
+    CallFrame call_stack[MAX_CALL_DEPTH];
+    int       call_sp;        /* -1 = 无活动调用 */
 } SDVM;
 
 /* ═══════════════════════════════════════════════
