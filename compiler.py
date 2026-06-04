@@ -660,57 +660,58 @@ class Compiler:
         self.define_label(end_label)
 
     def compile_unary(self, expr):
+        # ++/-- 需要先处理，避免 compile_expression(operand) 额外 emit OP_LOAD
+        if expr.op in ('++', '--'):
+            if not isinstance(expr.operand, Identifier):
+                raise CompileError("++/-- 只能用于变量")
+            slot = self.get_local(expr.operand.name)
+            if expr.op == '++':
+                if expr.is_prefix:
+                    # prefix ++i: LOAD i, +1, DUP, STORE i  → 栈顶 = i+1 (新值)
+                    self.emit(OP_LOAD)
+                    self.emit_u8(slot)
+                    self.emit(OP_ICONST)
+                    self.emit_i32(1)
+                    self.emit(OP_ADD)
+                    self.emit(OP_DUP)
+                    self.emit(OP_STORE)
+                    self.emit_u8(slot)
+                else:
+                    # postfix i++: LOAD i, DUP, +1, STORE i  → 栈顶 = i (原值)
+                    self.emit(OP_LOAD)
+                    self.emit_u8(slot)
+                    self.emit(OP_DUP)
+                    self.emit(OP_ICONST)
+                    self.emit_i32(1)
+                    self.emit(OP_ADD)
+                    self.emit(OP_STORE)
+                    self.emit_u8(slot)
+            else:  # '--'
+                if expr.is_prefix:
+                    self.emit(OP_LOAD)
+                    self.emit_u8(slot)
+                    self.emit(OP_ICONST)
+                    self.emit_i32(1)
+                    self.emit(OP_SUB)
+                    self.emit(OP_DUP)
+                    self.emit(OP_STORE)
+                    self.emit_u8(slot)
+                else:
+                    self.emit(OP_LOAD)
+                    self.emit_u8(slot)
+                    self.emit(OP_DUP)
+                    self.emit(OP_ICONST)
+                    self.emit_i32(1)
+                    self.emit(OP_SUB)
+                    self.emit(OP_STORE)
+                    self.emit_u8(slot)
+            return
+
         self.compile_expression(expr.operand)
         if expr.op == '-':
             self.emit(OP_NEG)
         elif expr.op == '!':
             self.emit(OP_NOT)
-        elif expr.op == '++':
-            if isinstance(expr.operand, Identifier):
-                slot = self.get_local(expr.operand.name)
-                if expr.is_prefix:
-                    self.emit(OP_LOAD)
-                    self.emit_u8(slot)
-                    self.emit(OP_ICONST)
-                    self.emit_i32(1)
-                    self.emit(OP_ADD)
-                    self.emit(OP_DUP)
-                    self.emit(OP_STORE)
-                    self.emit_u8(slot)
-                else:
-                    self.emit(OP_LOAD)
-                    self.emit_u8(slot)
-                    self.emit(OP_DUP)
-                    self.emit(OP_ICONST)
-                    self.emit_i32(1)
-                    self.emit(OP_ADD)
-                    self.emit(OP_STORE)
-                    self.emit_u8(slot)
-            else:
-                raise CompileError("++/-- 只能用于变量")
-        elif expr.op == '--':
-            if isinstance(expr.operand, Identifier):
-                slot = self.get_local(expr.operand.name)
-                if expr.is_prefix:
-                    self.emit(OP_LOAD)
-                    self.emit_u8(slot)
-                    self.emit(OP_ICONST)
-                    self.emit_i32(1)
-                    self.emit(OP_SUB)
-                    self.emit(OP_DUP)
-                    self.emit(OP_STORE)
-                    self.emit_u8(slot)
-                else:
-                    self.emit(OP_LOAD)
-                    self.emit_u8(slot)
-                    self.emit(OP_DUP)
-                    self.emit(OP_ICONST)
-                    self.emit_i32(1)
-                    self.emit(OP_SUB)
-                    self.emit(OP_STORE)
-                    self.emit_u8(slot)
-            else:
-                raise CompileError("++/-- 只能用于变量")
         else:
             raise CompileError(f"不支持的一元运算符: {expr.op}")
 
@@ -820,6 +821,11 @@ class Compiler:
         if self.errors > 0:
             print(f"编译失败: {self.errors} 个错误")
             return False
+        
+        # 先把所有函数名加入字符串池，确保它们被写入文件
+        for func in self.func_defs:
+            if func.name is not None:
+                self.add_string(func.name)
         
         with open(path, 'wb') as f:
             # Magic: "SDNC"

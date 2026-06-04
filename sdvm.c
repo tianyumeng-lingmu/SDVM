@@ -486,7 +486,16 @@ int sdvm_run(SDVM* vm) {
         vm->local_count = main_local_count;
     }
 
+    /* 指令数限制，防止死循环 */
+    int64_t max_insn = 1000000;
+    int64_t insn_count = 0;
+
     while (vm->ip < vm->code_size) {
+        if (++insn_count > max_insn) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "指令数超限 (%lld) — 可能死循环, ip=%u", max_insn, vm->ip);
+            vm->has_error = 1; return -1;
+        }
         uint8_t op = vm->code[vm->ip++];
 
         if (vm->verbose) {
@@ -499,10 +508,7 @@ int sdvm_run(SDVM* vm) {
             else if (op == OP_BIF) printf(" bif:%d args:%d", vm->code[vm->ip], vm->code[vm->ip + 1]);
             else if (op == OP_CALL) {
                 uint32_t fi = FETCH_U32();
-                uint8_t ac = FETCH_U8();
-                printf(" func:%u args:%u", fi, ac);
-                /* 恢复 ip 以不干扰后续读取 */
-                vm->ip -= 5;
+                printf(" func:%u args:%u", fi, vm->code[vm->ip + 4]);
             } else if (op == OP_ANON) {
                 uint32_t fi = FETCH_U32();
                 printf(" func:%u", fi);
@@ -568,7 +574,8 @@ int sdvm_run(SDVM* vm) {
                 snprintf(vm->error_msg, sizeof(vm->error_msg), "DUP: 栈空");
                 vm->has_error = 1; return -1;
             }
-            PUSH(PEEK());
+            Value _dup_val = vm->stack[vm->sp];
+            PUSH(_dup_val);
             break;
         }
 

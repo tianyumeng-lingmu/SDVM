@@ -161,6 +161,7 @@ typedef struct {
    ═══════════════════════════════════════════════ */
 #define MAX_FUNCS      256
 #define MAX_CALL_DEPTH 64
+#define LOCALS_MAX     256
 
 typedef struct {
     uint32_t name_idx;      /* 字符串池索引，0xFFFFFFFF = 匿名 */
@@ -180,7 +181,6 @@ typedef struct {
    SDVM 虚拟机实例
    ═══════════════════════════════════════════════ */
 #define STACK_MAX   4096
-#define LOCALS_MAX  256
 #define STRPOOL_MAX 4096
 #define CODE_MAX   (1024 * 64)    /* 最大字节码 64KB */
 
