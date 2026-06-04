@@ -1,0 +1,36 @@
+# Visual Studio build artifacts
+*.obj
+*.ilk
+*.ipdb
+*.iobj
+*.idb
+*.log
+*.recipe
+*.tlog/
+*.lastbuildstate
+unsuccessfulbuild
+
+# VS cache
+.vs/
+*.suo
+*.user
+*.sln.docstates
+ipch/
+
+# Build intermediate directories
+SDVM/
+x64/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Compiled .dance files (generated from .star)
+*.dance
+# But keep the sample .dance files (example outputs)
+!samples/*.dance
+
+# Database files (generated)
+*.db
+# But keep sample database files
+!samples/*.db

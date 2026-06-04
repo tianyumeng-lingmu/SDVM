@@ -1,0 +1,212 @@
+﻿/*
+ * ═══════════════════════════════════════════════
+ *  SDVM — 星舞虚拟机 (Star Dance Virtual Machine)
+ *  类 JVM 栈式虚拟机，执行 .dance 字节码
+ * ═══════════════════════════════════════════════
+ */
+
+#ifndef SDVM_H
+#define SDVM_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ═══════════════════════════════════════════════
+   指令集 (Opcodes)
+   ┌─────────────┬──────┬──────────────────────────┐
+   │ 指令        │ 操作数  │ 说明                     │
+   ├─────────────┼──────┼──────────────────────────┤
+   │ 栈操作      │      │                          │
+   │ NOP         │ -    │ 空操作                    │
+   │ ICONST i4   │ +4   │ 压入 int32 常量           │
+   │ FCONST f8   │ +8   │ 压入 double 常量          │
+   │ SCONST i4   │ +4   │ 压入字符串(常量池索引)     │
+   │ BCONST b1   │ +1   │ 压入布尔值(0/1)           │
+   │ NULL        │ -    │ 压入 null                 │
+   │ DUP         │ -    │ 复制栈顶                  │
+   │ POP         │ -    │ 弹出栈顶                  │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 局部变量     │      │                          │
+   │ LOAD b1     │ +1   │ 局部变量→栈               │
+   │ STORE b1    │ +1   │ 栈→局部变量               │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 算术运算     │      │ (pop b, pop a, push a◈b) │
+   │ ADD / SUB    │ -    │ + - 运算                  │
+   │ MUL / DIV    │ -    │ * / 运算                  │
+   │ MOD / NEG    │ -    │ % 和取负                  │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 比较运算     │      │ (pop b, pop a, push bool)│
+   │ EQ NE LT     │ -    │ == != <                  │
+   │ GT LE GE     │ -    │ > <= >=                  │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 逻辑运算     │      │                          │
+   │ NOT          │ -    │ 取反                      │
+   │─────────────┼──────┼──────────────────────────┤
+   │ 控制流       │      │                          │
+   │ JMP i4      │ +4   │ 无条件跳转(相对偏移)       │
+   │ JIF i4      │ +4   │ false 时跳转              │
+   │ BIF b1 b1   │ +2   │ 调用内置函数(索引+参数数) │
+   │ RET          │ -    │ 返回                      │
+   │ HALT         │ -    │ 停止执行                  │
+   │─────────────┼──────┼──────────────────────────┤
+   │ I/O          │      │                          │
+   │ PRINT        │ -    │ 弹出并打印                │
+   │ SCAN         │ -    │ 读输入→压入字符串         │
+   ╚═══════════════════════════════════════════════╝
+   ═══════════════════════════════════════════════ */
+
+typedef enum {
+    /* 栈操作 0x00-0x0F */
+    OP_NOP       = 0x00,
+    OP_ICONST    = 0x01,   /* +4: int32 LE */
+    OP_FCONST    = 0x02,   /* +8: double IEEE 754 */
+    OP_SCONST    = 0x03,   /* +4: string pool index */
+    OP_BCONST    = 0x04,   /* +1: 0 or 1 */
+    OP_NULL      = 0x05,
+    OP_DUP       = 0x06,
+    OP_POP       = 0x07,
+
+    /* 局部变量 0x10-0x1F */
+    OP_LOAD      = 0x10,   /* +1: local index */
+    OP_STORE     = 0x11,   /* +1: local index */
+
+    /* 算术运算 0x20-0x2F */
+    OP_ADD       = 0x20,
+    OP_SUB       = 0x21,
+    OP_MUL       = 0x22,
+    OP_DIV       = 0x23,
+    OP_MOD       = 0x24,
+    OP_NEG       = 0x25,
+
+    /* 比较运算 0x30-0x37 */
+    OP_EQ        = 0x30,
+    OP_NE        = 0x31,
+    OP_LT        = 0x32,
+    OP_GT        = 0x33,
+    OP_LE        = 0x34,
+    OP_GE        = 0x35,
+
+    /* 逻辑运算 0x38-0x3F */
+    OP_NOT       = 0x38,
+
+    /* 控制流 0x40-0x4F */
+    OP_JMP       = 0x40,   /* +4: signed offset from next instruction */
+    OP_JIF       = 0x41,   /* +4: jump if top of stack is false */
+    OP_BIF       = 0x42,   /* +1: bif index, +1: arg count */
+    OP_RET       = 0x43,
+    OP_HALT      = 0x44,
+
+    /* I/O 0x70-0x7F */
+    OP_PRINT     = 0x70,
+    OP_SCAN      = 0x71,
+} OpCode;
+
+/* ═══════════════════════════════════════════════
+   内置函数索引 (BIF)
+   ═══════════════════════════════════════════════ */
+typedef enum {
+    BIF_SEE     = 0,   /* see(...): pop N args and print them */
+    BIF_INT     = 1,   /* int(x): convert to int64 */
+    BIF_FLOAT   = 2,   /* float(x): convert to double */
+    BIF_STR     = 3,   /* str(x): convert to string */
+    BIF_BOOL    = 4,   /* bool(x): convert to bool */
+    BIF_TYPE    = 5,   /* type(x): return type description */
+    BIF_ID      = 6,   /* ID(x): return unique id string */
+    BIF_LEN     = 7,   /* len(x): get length */
+    BIF_INSERT  = 8,   /* insert(prompt): read stdin string */
+    BIF_COUNT   = 9,
+} BifIndex;
+
+/* ═══════════════════════════════════════════════
+   Value — 栈上的值
+   类似 JVM 的变量类型，用 type + union 实现
+   ═══════════════════════════════════════════════ */
+typedef enum {
+    VAL_INT,
+    VAL_FLOAT,
+    VAL_BOOL,
+    VAL_STRING,    /* owned by const pool OR dynamically allocated */
+    VAL_NULL,
+} ValueType;
+
+typedef struct {
+    ValueType type;
+    union {
+        int64_t   int_val;
+        double    float_val;
+        uint8_t   bool_val;
+        const char* str_val;
+    } data;
+} Value;
+
+/* ═══════════════════════════════════════════════
+   SDVM 虚拟机实例
+   ═══════════════════════════════════════════════ */
+#define STACK_MAX   4096
+#define LOCALS_MAX  256
+#define STRPOOL_MAX 4096
+#define CODE_MAX   (1024 * 64)    /* 最大字节码 64KB */
+
+typedef struct {
+    uint8_t*  code;           /* 字节码缓冲区 */
+    uint32_t  code_size;      /* 字节码大小 */
+
+    char**    strpool;        /* 字符串常量池 */
+    uint32_t  strpool_count;  /* 字符串数量 */
+
+    Value     stack[STACK_MAX];
+    int       sp;             /* 栈顶指针 (-1 = 空) */
+
+    Value     locals[LOCALS_MAX];
+    int       local_count;    /* 局部变量数 */
+
+    uint32_t  ip;             /* 指令指针 */
+
+    int       has_error;
+    char      error_msg[256];
+    int       verbose;        /* 调试输出 */
+
+    /* 动态分配的字符串堆 (用于 insert/scan 等运行时字符串) */
+    char**    heap_strs;
+    uint32_t  heap_str_count;
+    uint32_t  heap_str_cap;
+} SDVM;
+
+/* ═══════════════════════════════════════════════
+   API
+   ═══════════════════════════════════════════════ */
+
+/* 初始化 */
+void       sdvm_init(SDVM* vm);
+
+/* 加载 .dance 字节码 (返回 0=成功, -1=失败) */
+int        sdvm_load(SDVM* vm, const uint8_t* buffer, size_t size);
+
+/* 执行 (返回 0=成功, -1=运行时错误) */
+int        sdvm_run(SDVM* vm);
+
+/* 清理 */
+void       sdvm_free(SDVM* vm);
+
+/* 动态字符串分配 */
+const char* sdvm_heap_strdup(SDVM* vm, const char* src);
+
+/* 文件工具 */
+uint8_t*   sdvm_read_file(const char* path, size_t* out_size);
+
+/* 值工具 */
+void       sdvm_print_value(const Value* v);
+const char* sdvm_value_type_str(const Value* v);
+
+/* 反汇编调试 */
+const char* sdvm_opname(uint8_t op);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SDVM_H */
