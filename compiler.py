@@ -37,7 +37,7 @@ try:
         BreakStmt, ContinueStmt, CutDownStmt,
         BinaryOp, UnaryOp, Literal, Identifier,
         CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt,
-        ListLiteral, NewExpr, GetAttr, ThrowStmt, TryStmt,
+        ListLiteral, NewExpr, GetAttr, IndexExpr, ThrowStmt, TryStmt,
         AnonymouFunc, NamedArgument, UseStmt,
     )
     from tokens import Token
@@ -100,6 +100,8 @@ OP_CALLR   = 0x52  # +1: arg_count (从栈顶弹出函数引用并调用)
 OP_NEWOBJ  = 0x60  # +1: num_pairs (从栈取 key-value 对创建对象)
 OP_GETATTR = 0x61  # +4: strpool_idx (读取对象属性)
 OP_SETATTR = 0x62  # +4: strpool_idx (设置对象属性)
+OP_GETINDEX = 0x63 # - : 下标访问 expr[idx]
+OP_SETINDEX = 0x64 # - : 下标赋值 expr[idx] = val
 
 # I/O 0x70-0x7F
 OP_PRINT   = 0x70
@@ -132,6 +134,15 @@ BIF_FILE_READ   = 18  # file_read(path) → 字符串
 BIF_FILE_WRITE  = 19  # file_write(path, content) → void
 BIF_FILE_EXISTS = 20  # file_exists(path) → bool
 
+# 字符串 BIF
+BIF_STR_AT       = 21  # str_at(s, idx) → str
+BIF_STR_SUB      = 22  # str_sub(s, start, end) → str
+BIF_STR_FIND     = 23  # str_find(s, pattern) → int
+BIF_STR_CONTAINS = 24  # str_contains(s, pattern) → bool
+BIF_STR_TRIM     = 25  # str_trim(s) → str
+BIF_STR_UPPER    = 26  # str_upper(s) → str
+BIF_STR_LOWER    = 27  # str_lower(s) → str
+
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -152,6 +163,13 @@ BIF_MAP = {
     'file_read':   BIF_FILE_READ,
     'file_write':  BIF_FILE_WRITE,
     'file_exists': BIF_FILE_EXISTS,
+    'str_at':      BIF_STR_AT,
+    'str_sub':     BIF_STR_SUB,
+    'str_find':    BIF_STR_FIND,
+    'str_contains': BIF_STR_CONTAINS,
+    'str_trim':    BIF_STR_TRIM,
+    'str_upper':   BIF_STR_UPPER,
+    'str_lower':   BIF_STR_LOWER,
 }
 
 
@@ -512,6 +530,12 @@ class Compiler:
             str_idx = self.add_string(attr_name)
             self.emit(OP_SETATTR)
             self.emit_u32(str_idx)
+        elif isinstance(stmt.target, IndexExpr):
+            # expr[idx] = value
+            self.compile_expression(stmt.target.obj)   # 对象
+            self.compile_expression(stmt.target.index)  # 索引
+            self.compile_expression(stmt.value)         # 值
+            self.emit(OP_SETINDEX)
         else:
             raise CompileError(f"不支持的赋值目标: {type(stmt.target).__name__}")
 
@@ -686,6 +710,8 @@ class Compiler:
             raise CompileError("new 表达式暂不支持编译")
         elif isinstance(expr, GetAttr):
             self.compile_getattr(expr)
+        elif isinstance(expr, IndexExpr):
+            self.compile_index_expr(expr)
         else:
             raise CompileError(f"不支持的表达式: {type(expr).__name__}")
 
@@ -952,6 +978,12 @@ class Compiler:
         str_idx = self.add_string(attr_name)
         self.emit(OP_GETATTR)
         self.emit_u32(str_idx)
+
+    def compile_index_expr(self, expr):
+        """编译下标访问 expr[idx]"""
+        self.compile_expression(expr.obj)
+        self.compile_expression(expr.index)
+        self.emit(OP_GETINDEX)
 
     # ─── 输出 ───────────────────────────────────
     def write_dance(self, path: str):

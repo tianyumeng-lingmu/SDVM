@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ═══════════════════════════════════════════════
  *  SDVM — 星舞虚拟机 (Star Dance Virtual Machine)
  *  类 JVM 栈式虚拟机，执行 .dance 字节码
@@ -119,6 +119,8 @@ typedef enum {
     OP_NEWOBJ    = 0x60,   /* +1: num_pairs, 从栈取 key-value 对创建对象 */
     OP_GETATTR   = 0x61,   /* +4: strpool_idx, 读取对象属性 */
     OP_SETATTR   = 0x62,   /* +4: strpool_idx, 设置对象属性 */
+    OP_GETINDEX  = 0x63,   /* - : 下标访问 expr[idx], 栈: obj idx → value */
+    OP_SETINDEX  = 0x64,   /* - : 下标赋值 expr[idx]=val, 栈: obj idx val → */
 } OpCode;
 
 /* ═══════════════════════════════════════════════
@@ -144,7 +146,14 @@ typedef enum {
     BIF_FILE_READ   = 18, /* file_read(path): 读取整个文件→字符串 */
     BIF_FILE_WRITE  = 19, /* file_write(path, content): 写入字符串到文件 */
     BIF_FILE_EXISTS = 20, /* file_exists(path): 检查文件是否存在→bool */
-    BIF_COUNT   = 21,
+    BIF_STR_AT      = 21, /* str_at(s, idx): 取字符串第 idx 个字符 */
+    BIF_STR_SUB     = 22, /* str_sub(s, start, end): 取子串 [start, end) */
+    BIF_STR_FIND    = 23, /* str_find(s, pattern): 查找子串位置, -1=未找到 */
+    BIF_STR_CONTAINS= 24, /* str_contains(s, pattern): 检查是否包含子串 */
+    BIF_STR_TRIM    = 25, /* str_trim(s): 去除前后空白 */
+    BIF_STR_UPPER   = 26, /* str_upper(s): 转大写 */
+    BIF_STR_LOWER   = 27, /* str_lower(s): 转小写 */
+    BIF_COUNT   = 28,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════

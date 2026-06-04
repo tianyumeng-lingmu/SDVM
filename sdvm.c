@@ -241,6 +241,8 @@ const char* sdvm_opname(uint8_t op) {
     case OP_NEWOBJ:  return "NEWOBJ";
     case OP_GETATTR: return "GETATTR";
     case OP_SETATTR: return "SETATTR";
+    case OP_GETINDEX: return "GETINDEX";
+    case OP_SETINDEX: return "SETINDEX";
     default:        return "???";
     }
 }
@@ -1077,6 +1079,158 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         break;
     }
 
+    /* ─── 字符串函数 ──────────────────────── */
+    case BIF_STR_AT: {
+        if (argc != 2 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_at 需要 2 个参数 (str, idx)");
+            vm->has_error = 1; return -1;
+        }
+        Value idx_v = vm->stack[vm->sp--];
+        Value str_v = vm->stack[vm->sp--];
+        if (str_v.type != VAL_STRING || idx_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_at: 参数类型错误，需要 (str, int)");
+            vm->has_error = 1; return -1;
+        }
+        const char* s = str_v.data.str_val ? str_v.data.str_val : "";
+        int64_t idx = idx_v.data.int_val;
+        size_t len = strlen(s);
+        if (idx < 0 || (size_t)idx >= len) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_at: 索引越界 (%lld, 长度 %zu)", (long long)idx, len);
+            vm->has_error = 1; return -1;
+        }
+        char buf[2] = { s[idx], '\0' };
+        Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
+        PUSH(r);
+        break;
+    }
+    case BIF_STR_SUB: {
+        if (argc < 2 || argc > 3 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_sub 需要 2~3 个参数 (str, start, [end])");
+            vm->has_error = 1; return -1;
+        }
+        int64_t end = -1;
+        if (argc == 3) {
+            Value end_v = vm->stack[vm->sp--];
+            if (end_v.type != VAL_INT) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "str_sub: end 必须是整数");
+                vm->has_error = 1; return -1;
+            }
+            end = end_v.data.int_val;
+        }
+        Value start_v = vm->stack[vm->sp--];
+        Value str_v = vm->stack[vm->sp--];
+        if (str_v.type != VAL_STRING || start_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_sub: 参数类型错误，需要 (str, int, [int])");
+            vm->has_error = 1; return -1;
+        }
+        const char* s = str_v.data.str_val ? str_v.data.str_val : "";
+        size_t len = strlen(s);
+        int64_t start = start_v.data.int_val;
+        if (start < 0) start = 0;
+        if ((size_t)start > len) start = (int64_t)len;
+        if (end < 0 || (size_t)end > len) end = (int64_t)len;
+        if (end < start) end = start;
+        size_t sub_len = (size_t)(end - start);
+        char* buf = (char*)malloc(sub_len + 1);
+        if (!buf) { vm->has_error = 1; return -1; }
+        memcpy(buf, s + start, sub_len);
+        buf[sub_len] = '\0';
+        Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
+        free(buf);
+        PUSH(r);
+        break;
+    }
+    case BIF_STR_FIND: {
+        if (argc != 2 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_find 需要 2 个参数 (str, pattern)");
+            vm->has_error = 1; return -1;
+        }
+        Value pat_v = vm->stack[vm->sp--];
+        Value str_v = vm->stack[vm->sp--];
+        if (str_v.type != VAL_STRING || pat_v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_find: 参数必须是字符串");
+            vm->has_error = 1; return -1;
+        }
+        const char* haystack = str_v.data.str_val ? str_v.data.str_val : "";
+        const char* needle = pat_v.data.str_val ? pat_v.data.str_val : "";
+        const char* found = strstr(haystack, needle);
+        Value r; r.type = VAL_INT;
+        r.data.int_val = found ? (int64_t)(found - haystack) : -1;
+        PUSH(r);
+        break;
+    }
+    case BIF_STR_CONTAINS: {
+        if (argc != 2 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_contains 需要 2 个参数 (str, pattern)");
+            vm->has_error = 1; return -1;
+        }
+        Value pat_v = vm->stack[vm->sp--];
+        Value str_v = vm->stack[vm->sp--];
+        if (str_v.type != VAL_STRING || pat_v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_contains: 参数必须是字符串");
+            vm->has_error = 1; return -1;
+        }
+        const char* haystack = str_v.data.str_val ? str_v.data.str_val : "";
+        const char* needle = pat_v.data.str_val ? pat_v.data.str_val : "";
+        Value r; r.type = VAL_BOOL; r.data.bool_val = (strstr(haystack, needle) != NULL) ? 1 : 0;
+        PUSH(r);
+        break;
+    }
+    case BIF_STR_TRIM: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_trim 需要 1 个参数 (str)");
+            vm->has_error = 1; return -1;
+        }
+        Value v = vm->stack[vm->sp--];
+        if (v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_trim: 参数必须是字符串");
+            vm->has_error = 1; return -1;
+        }
+        const char* s = v.data.str_val ? v.data.str_val : "";
+        while (*s && (unsigned char)*s <= ' ') s++;
+        if (*s == '\0') {
+            Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, "");
+            PUSH(r); break;
+        }
+        size_t len = strlen(s);
+        while (len > 0 && (unsigned char)s[len-1] <= ' ') len--;
+        char* buf = (char*)malloc(len + 1);
+        if (!buf) { vm->has_error = 1; return -1; }
+        memcpy(buf, s, len);
+        buf[len] = '\0';
+        Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
+        free(buf);
+        PUSH(r);
+        break;
+    }
+    case BIF_STR_UPPER:
+    case BIF_STR_LOWER: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_upper/lower 需要 1 个参数 (str)");
+            vm->has_error = 1; return -1;
+        }
+        Value v = vm->stack[vm->sp--];
+        if (v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_upper/lower: 参数必须是字符串");
+            vm->has_error = 1; return -1;
+        }
+        const char* s = v.data.str_val ? v.data.str_val : "";
+        size_t len = strlen(s);
+        char* buf = (char*)malloc(len + 1);
+        if (!buf) { vm->has_error = 1; return -1; }
+        for (size_t i = 0; i < len; i++) {
+            if (bif_idx == BIF_STR_UPPER)
+                buf[i] = (char)toupper((unsigned char)s[i]);
+            else
+                buf[i] = (char)tolower((unsigned char)s[i]);
+        }
+        buf[len] = '\0';
+        Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
+        free(buf);
+        PUSH(r);
+        break;
+    }
+
     default:
         snprintf(vm->error_msg, sizeof(vm->error_msg),
                  "未知的内置函数索引: %d", bif_idx);
@@ -1742,6 +1896,65 @@ int sdvm_run(SDVM* vm) {
             const char* key = (str_idx < vm->strpool_count) ? vm->strpool[str_idx] : "";
             obj_set((Object*)obj_v.data.ptr_val, key, val);
             PUSH(val);  /* 像赋值表达式一样返回值 */
+            break;
+        }
+
+        case OP_GETINDEX: {
+            if (vm->sp < 1) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 栈元素不足");
+                vm->has_error = 1; return -1;
+            }
+            Value idx = vm->stack[vm->sp--];
+            Value obj = vm->stack[vm->sp--];
+
+            if (obj.type == VAL_STRING && idx.type == VAL_INT) {
+                /* 字符串下标: s[idx] → 返回单个字符 */
+                const char* s = obj.data.str_val ? obj.data.str_val : "";
+                size_t len = strlen(s);
+                int64_t i = idx.data.int_val;
+                if (i < 0 || (size_t)i >= len) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 字符串索引越界 (%lld, 长度 %zu)", (long long)i, len);
+                    vm->has_error = 1; return -1;
+                }
+                char buf[2] = { s[i], '\0' };
+                Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
+                PUSH(r);
+            } else if (obj.type == VAL_OBJECT && idx.type == VAL_STRING) {
+                /* 对象下标: obj["key"] */
+                const char* key = idx.data.str_val ? idx.data.str_val : "";
+                Value r = obj_get((Object*)obj.data.ptr_val, key);
+                if (r.type == VAL_NULL) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 键 '%s' 不存在", key);
+                    vm->has_error = 1; return -1;
+                }
+                PUSH(r);
+            } else {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 不支持的索引类型 (obj=%d, idx=%d)", obj.type, idx.type);
+                vm->has_error = 1; return -1;
+            }
+            break;
+        }
+
+        case OP_SETINDEX: {
+            if (vm->sp < 2) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "SETINDEX: 栈元素不足");
+                vm->has_error = 1; return -1;
+            }
+            Value val = vm->stack[vm->sp--];
+            Value idx = vm->stack[vm->sp--];
+            Value obj = vm->stack[vm->sp--];
+
+            if (obj.type == VAL_STRING) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "SETINDEX: 字符串不可变，不能通过下标修改");
+                vm->has_error = 1; return -1;
+            } else if (obj.type == VAL_OBJECT && idx.type == VAL_STRING) {
+                const char* key = idx.data.str_val ? idx.data.str_val : "";
+                obj_set((Object*)obj.data.ptr_val, key, val);
+                PUSH(val);
+            } else {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "SETINDEX: 不支持的索引类型");
+                vm->has_error = 1; return -1;
+            }
             break;
         }
 
