@@ -129,7 +129,12 @@ typedef enum {
     BIF_ID      = 6,   /* ID(x): return unique id string */
     BIF_LEN     = 7,   /* len(x): get length */
     BIF_INSERT  = 8,   /* insert(prompt): read stdin string */
-    BIF_COUNT   = 9,
+    BIF_NET_START = 10, /* net_start(port): start TCP listener */
+    BIF_NET_ACCEPT = 11,/* net_accept(handle): accept connection */
+    BIF_NET_READLINE = 12, /* net_readline(handle): read line */
+    BIF_NET_WRITE = 13, /* net_write(handle, str): send data */
+    BIF_NET_CLOSE = 14, /* net_close(handle): close handle */
+    BIF_COUNT   = 15,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
@@ -215,6 +220,10 @@ typedef struct {
     /* 调用栈 */
     CallFrame call_stack[MAX_CALL_DEPTH];
     int       call_sp;        /* -1 = 无活动调用 */
+
+    /* 网络套接字表 */
+    uintptr_t sockets[64];    /* 套接字句柄，0 = 空闲 */
+    int       socket_count;   /* 已分配套接字数 */
 } SDVM;
 
 /* ═══════════════════════════════════════════════

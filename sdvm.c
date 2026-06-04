@@ -14,6 +14,47 @@
 #include <errno.h>
 #include <ctype.h>
 
+/* 兼容 TCC 没有 strtoll 的问题 */
+#if defined(__TINYC__) && !defined(strtoll)
+#define strtoll _strtoi64
+#endif
+
+/* ─── Winsock 网络支持 ────────────────────── */
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+
+/* ─── Winsock 初始化 (单例) ───────────────── */
+static int _winsock_inited = 0;
+static int ensure_winsock(void) {
+    if (_winsock_inited) return 0;
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return -1;
+    _winsock_inited = 1;
+    return 0;
+}
+
+/* 分配新的套接字句柄 ID */
+static int alloc_socket_id(SDVM* vm, uintptr_t sock) {
+    for (int i = 0; i < 64; i++) {
+        if (vm->sockets[i] == 0) {
+            vm->sockets[i] = sock;
+            vm->socket_count++;
+            return i;
+        }
+    }
+    return -1; /* 已满 */
+}
+
+/* 释放套接字句柄 ID */
+static void free_socket_id(SDVM* vm, int id) {
+    if (id >= 0 && id < 64 && vm->sockets[id] != 0) {
+        closesocket((SOCKET)vm->sockets[id]);
+        vm->sockets[id] = 0;
+        vm->socket_count--;
+    }
+}
+
 /* ─── 字节序工具 (小端) ──────────────────────── */
 static uint32_t read_u32(const uint8_t* p) {
     return (uint32_t)p[0]
@@ -457,11 +498,210 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         PUSH(r);
         break;
     }
+
+    /* ─── BIF_NET_START(port) → handle ───── */
+    case BIF_NET_START: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start 需要 1 个参数 (port)");
+            vm->has_error = 1; return -1;
+        }
+        Value port_v = vm->stack[vm->sp--];
+        if (port_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: port 参数必须为整数");
+            vm->has_error = 1; return -1;
+        }
+        if (ensure_winsock() != 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: Winsock 初始化失败");
+            vm->has_error = 1; return -1;
+        }
+
+        int port = (int)port_v.data.int_val;
+        SOCKET server = socket(AF_INET, SOCK_STREAM, 0);
+        if (server == INVALID_SOCKET) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: 创建 socket 失败 (error=%d)", WSAGetLastError());
+            vm->has_error = 1; return -1;
+        }
+
+        int opt = 1;
+        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons((unsigned short)port);
+        addr.sin_addr.s_addr = INADDR_ANY;
+
+        if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: bind 失败 (port=%d, error=%d)", port, WSAGetLastError());
+            closesocket(server);
+            vm->has_error = 1; return -1;
+        }
+        if (listen(server, SOMAXCONN) == SOCKET_ERROR) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: listen 失败 (error=%d)", WSAGetLastError());
+            closesocket(server);
+            vm->has_error = 1; return -1;
+        }
+
+        int h = alloc_socket_id(vm, (uintptr_t)server);
+        if (h < 0) {
+            closesocket(server);
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_start: 套接字表已满");
+            vm->has_error = 1; return -1;
+        }
+
+        Value r;
+        r.type = VAL_INT;
+        r.data.int_val = h;
+        PUSH(r);
+        break;
+    }
+
+    /* ─── BIF_NET_ACCEPT(handle) → client_handle ───── */
+    case BIF_NET_ACCEPT: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_accept 需要 1 个参数 (handle)");
+            vm->has_error = 1; return -1;
+        }
+        Value h_v = vm->stack[vm->sp--];
+        if (h_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_accept: handle 参数必须为整数");
+            vm->has_error = 1; return -1;
+        }
+        int h = (int)h_v.data.int_val;
+        if (h < 0 || h >= 64 || vm->sockets[h] == 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_accept: 无效的 handle %d", h);
+            vm->has_error = 1; return -1;
+        }
+
+        SOCKET server = (SOCKET)vm->sockets[h];
+        struct sockaddr_in client_addr;
+        int addrlen = sizeof(client_addr);
+        SOCKET client = accept(server, (struct sockaddr*)&client_addr, &addrlen);
+        if (client == INVALID_SOCKET) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_accept: accept 失败 (error=%d)", WSAGetLastError());
+            vm->has_error = 1; return -1;
+        }
+
+        int ch = alloc_socket_id(vm, (uintptr_t)client);
+        if (ch < 0) {
+            closesocket(client);
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_accept: 套接字表已满");
+            vm->has_error = 1; return -1;
+        }
+
+        Value r;
+        r.type = VAL_INT;
+        r.data.int_val = ch;
+        PUSH(r);
+        break;
+    }
+
+    /* ─── BIF_NET_READLINE(handle) → string ───── */
+    case BIF_NET_READLINE: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_readline 需要 1 个参数 (handle)");
+            vm->has_error = 1; return -1;
+        }
+        Value h_v = vm->stack[vm->sp--];
+        if (h_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_readline: handle 参数必须为整数");
+            vm->has_error = 1; return -1;
+        }
+        int h = (int)h_v.data.int_val;
+        if (h < 0 || h >= 64 || vm->sockets[h] == 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_readline: 无效的 handle %d", h);
+            vm->has_error = 1; return -1;
+        }
+
+        SOCKET s = (SOCKET)vm->sockets[h];
+        char buf[4096];
+        size_t pos = 0;
+        while (pos < sizeof(buf) - 1) {
+            char c;
+            int n = recv(s, &c, 1, 0);
+            if (n <= 0) break;
+            if (c == '\n') break;
+            if (c != '\r') buf[pos++] = c;
+        }
+        buf[pos] = '\0';
+
+        Value r;
+        r.type = VAL_STRING;
+        r.data.str_val = sdvm_heap_strdup(vm, buf);
+        PUSH(r);
+        break;
+    }
+
+    /* ─── BIF_NET_WRITE(handle, str) → void ───── */
+    case BIF_NET_WRITE: {
+        if (argc != 2 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_write 需要 2 个参数 (handle, str)");
+            vm->has_error = 1; return -1;
+        }
+        Value str_v = vm->stack[vm->sp--];
+        Value h_v = vm->stack[vm->sp--];
+        if (h_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_write: handle 参数必须为整数");
+            vm->has_error = 1; return -1;
+        }
+        int h = (int)h_v.data.int_val;
+        if (h < 0 || h >= 64 || vm->sockets[h] == 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_write: 无效的 handle %d", h);
+            vm->has_error = 1; return -1;
+        }
+
+        const char* data = (str_v.type == VAL_STRING && str_v.data.str_val)
+                           ? str_v.data.str_val : "";
+        SOCKET s = (SOCKET)vm->sockets[h];
+        int len = (int)strlen(data);
+        send(s, data, len, 0);
+        /* void BIF: push null 保持栈平衡 (编译器会 emit POP) */
+        { Value _null; _null.type = VAL_NULL; PUSH(_null); }
+        break;
+    }
+
+    /* ─── BIF_NET_CLOSE(handle) → void ───── */
+    case BIF_NET_CLOSE: {
+        if (argc != 1 || vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_close 需要 1 个参数 (handle)");
+            vm->has_error = 1; return -1;
+        }
+        Value h_v = vm->stack[vm->sp--];
+        if (h_v.type != VAL_INT) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "net_close: handle 参数必须为整数");
+            vm->has_error = 1; return -1;
+        }
+        int h = (int)h_v.data.int_val;
+        free_socket_id(vm, h);
+        /* void BIF: push null 保持栈平衡 (编译器会 emit POP) */
+        { Value _null; _null.type = VAL_NULL; PUSH(_null); }
+        break;
+    }
+
     default:
         snprintf(vm->error_msg, sizeof(vm->error_msg),
                  "未知的内置函数索引: %d", bif_idx);
         vm->has_error = 1;
-        break;
+        return -1;
     }
     return 0;
 }
@@ -475,6 +715,8 @@ int sdvm_run(SDVM* vm) {
     vm->ip = 0;
     vm->has_error = 0;
     vm->call_sp = -1;
+    vm->socket_count = 0;
+    memset(vm->sockets, 0, sizeof(vm->sockets));
 
     /* 初始化主函数的局部变量 */
     if (vm->func_count > 0) {

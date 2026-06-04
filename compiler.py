@@ -38,7 +38,7 @@ try:
         BinaryOp, UnaryOp, Literal, Identifier,
         CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt,
         ListLiteral, NewExpr, GetAttr, ThrowStmt, TryStmt,
-        AnonymouFunc, NamedArgument,
+        AnonymouFunc, NamedArgument, UseStmt,
     )
     from tokens import Token
 except ImportError as e:
@@ -111,6 +111,13 @@ BIF_ID     = 6
 BIF_LEN    = 7
 BIF_INSERT = 8
 
+# 网络 BIF
+BIF_NET_START   = 10  # net_start(port) → server_handle
+BIF_NET_ACCEPT  = 11  # net_accept(handle) → client_handle
+BIF_NET_READLINE = 12 # net_readline(handle) → string
+BIF_NET_WRITE   = 13  # net_write(handle, string) → void
+BIF_NET_CLOSE   = 14  # net_close(handle) → void
+
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -121,6 +128,11 @@ BIF_MAP = {
     'ID': BIF_ID,
     'len': BIF_LEN,
     'insert': BIF_INSERT,
+    'net_start': BIF_NET_START,
+    'net_accept': BIF_NET_ACCEPT,
+    'net_readline': BIF_NET_READLINE,
+    'net_write': BIF_NET_WRITE,
+    'net_close': BIF_NET_CLOSE,
 }
 
 
@@ -301,13 +313,74 @@ class Compiler:
         for s in self._flatten_body(body):
             self.compile_statement(s)
 
+    def _get_packages_dir(self) -> str:
+        """返回包目录路径 (compiler.py 同级的 packages/)"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'packages')
+
+    def _import_package(self, package_name: str):
+        """导入包：找到并解析 packages/{name}.star，将其 thing 声明加入函数表"""
+        pkg_dir = self._get_packages_dir()
+        pkg_path = os.path.join(pkg_dir, f'{package_name}.star')
+        if not os.path.exists(pkg_path):
+            raise CompileError(f"找不到包 '{package_name}' (搜索路径: {pkg_path})")
+
+        # 解析包文件
+        from lexer import Lexer
+        from parser import Parser
+        with open(pkg_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        pkg_ast = parser.parse()
+
+        # 验证包文件只能有 thing 声明，不能有 start/main
+        # (parse() 会默认创建空的 StartBlock/MainBlock，所以需要检查是否有实际语句)
+        if (pkg_ast.start_block and len(pkg_ast.start_block.statements) > 0) or \
+           (pkg_ast.main_block and len(pkg_ast.main_block.statements) > 0):
+            raise CompileError(
+                f"包 '{package_name}' 只能包含 thing 函数声明，不能包含 start/main 命途块")
+
+        # 将包内的 thing 声明加入当前编译的函数表
+        for decl in pkg_ast.func_decls:
+            if decl.name in self.func_map:
+                raise CompileError(
+                    f"导入包 '{package_name}' 时发生命名冲突: 函数 '{decl.name}' 已存在")
+            if not self._has_return_in_body(decl.body):
+                raise CompileError(
+                    f"包 '{package_name}' 中的函数 '{decl.name}' 缺少 return() 语句")
+            func_index = len(self.func_defs) + 1  # +1 for main(func 0)
+            func = FuncDef(decl.name, decl.params, decl.body)
+            self.func_defs.append(func)
+            self.func_map[decl.name] = func_index
+
+        # 如果有 context 标记需要后续编译，记录下来
+        for func in self.func_defs:
+            if func.name not in [d.name for d in pkg_ast.func_decls]:
+                continue
+
     # ─── 主编译入口 ─────────────────────────────
     def compile(self, ast: Program):
         """编译整个 Program"""
         self.errors = 0
         
         try:
-            # 0. 收集模块级函数声明并验证
+            # ★ 文件级约束检查：一个文件不能同时有 lifecycle 块和函数声明
+            has_lifecycle = ast.start_block is not None or ast.main_block is not None
+            has_funcs = len(ast.func_decls) > 0
+            if has_lifecycle and has_funcs:
+                raise CompileError(
+                    "文件不能同时包含 start/main 命途块和 thing 函数声明。"
+                    "请将函数分离到独立的包文件中。")
+            if ast.main_block and ast.start_block is None:
+                raise CompileError(
+                    "main 命途必须与 start 命途同时存在")
+
+            # 0. 如果只有 lifecycle（没有函数），确保 func_defs 包含 main
+            if not has_funcs:
+                pass  # func 0 就是 main，不需要额外处理
+
+            # 收集模块级函数声明并验证
             func_index = 1  # index 0 是 main
             for decl in ast.func_decls:
                 # 验证函数必须包含 return() 语句
@@ -391,6 +464,8 @@ class Compiler:
             raise CompileError("try/catch 暂不支持编译到 .dance")
         elif isinstance(stmt, CaseStmt):
             self.compile_case(stmt)
+        elif isinstance(stmt, UseStmt):
+            self.compile_use(stmt)
         else:
             raise CompileError(f"不支持的语句类型: {type(stmt).__name__}")
 
@@ -418,6 +493,10 @@ class Compiler:
         self.emit(OP_BIF)
         self.emit_u8(BIF_SEE)
         self.emit_u8(len(stmt.args))
+
+    def compile_use(self, stmt: UseStmt):
+        """use 语句：导入包（编译时），不生成任何字节码"""
+        self._import_package(stmt.package_name)
 
     def compile_if(self, stmt):
         self.compile_expression(stmt.condition)
