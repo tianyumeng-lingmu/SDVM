@@ -22,11 +22,11 @@ import os
 
 # ─── 导入 star_dance 的前端 ──────────────────────
 # 将 star_dance 目录加入 path（与 parser/lexer 自身导入一致，避免模块重复加载）
-_star_dance_path = os.path.join(os.path.dirname(__file__), '..', 'star_dance')
+_star_dance_path = os.path.join(os.path.dirname(__file__), '..', '..', 'star_dance')
 if os.path.isdir(_star_dance_path):
     sys.path.insert(0, _star_dance_path)
 else:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 try:
     from lexer import Lexer
