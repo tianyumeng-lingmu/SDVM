@@ -96,6 +96,11 @@ OP_CALL    = 0x50  # +4: func_idx, +1: arg_count (编译时已知的函数)
 OP_ANON    = 0x51  # +4: func_idx (推送函数引用)
 OP_CALLR   = 0x52  # +1: arg_count (从栈顶弹出函数引用并调用)
 
+# 对象操作 0x60-0x6F
+OP_NEWOBJ  = 0x60  # +1: num_pairs (从栈取 key-value 对创建对象)
+OP_GETATTR = 0x61  # +4: strpool_idx (读取对象属性)
+OP_SETATTR = 0x62  # +4: strpool_idx (设置对象属性)
+
 # I/O 0x70-0x7F
 OP_PRINT   = 0x70
 OP_SCAN    = 0x71
@@ -118,6 +123,15 @@ BIF_NET_READLINE = 12 # net_readline(handle) → string
 BIF_NET_WRITE   = 13  # net_write(handle, string) → void
 BIF_NET_CLOSE   = 14  # net_close(handle) → void
 
+# JSON BIF
+BIF_JSON_ENCODE = 16  # json_encode(val) → JSON 字符串
+BIF_JSON_DECODE = 17  # json_decode(str) → 值
+
+# 文件 BIF
+BIF_FILE_READ   = 18  # file_read(path) → 字符串
+BIF_FILE_WRITE  = 19  # file_write(path, content) → void
+BIF_FILE_EXISTS = 20  # file_exists(path) → bool
+
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -133,6 +147,11 @@ BIF_MAP = {
     'net_readline': BIF_NET_READLINE,
     'net_write': BIF_NET_WRITE,
     'net_close': BIF_NET_CLOSE,
+    'json_encode': BIF_JSON_ENCODE,
+    'json_decode': BIF_JSON_DECODE,
+    'file_read':   BIF_FILE_READ,
+    'file_write':  BIF_FILE_WRITE,
+    'file_exists': BIF_FILE_EXISTS,
 }
 
 
@@ -480,10 +499,19 @@ class Compiler:
 
     def compile_assign(self, stmt):
         if isinstance(stmt.target, Identifier):
-            slot = self.get_local(stmt.target.name)
+            # 隐式声明：如果变量不存在则自动分配槽位
+            slot = self.alloc_local(stmt.target.name)
             self.compile_expression(stmt.value)
             self.emit(OP_STORE)
             self.emit_u8(slot)
+        elif isinstance(stmt.target, GetAttr):
+            # obj.attr = value
+            self.compile_expression(stmt.target.obj)  # 编译对象
+            self.compile_expression(stmt.value)        # 编译值
+            attr_name = stmt.target.attr
+            str_idx = self.add_string(attr_name)
+            self.emit(OP_SETATTR)
+            self.emit_u32(str_idx)
         else:
             raise CompileError(f"不支持的赋值目标: {type(stmt.target).__name__}")
 
@@ -575,7 +603,10 @@ class Compiler:
         self.loop_labels.pop()
 
     def compile_foreach(self, stmt):
-        raise CompileError("foreach 暂不支持编译到 .dance，请使用 for 循环替代")
+        raise CompileError(
+            "foreach 暂不支持编译到 .dance — "
+            "需要 SDVM 添加迭代器 BIF 支持后才能实现，"
+            "请使用 for(init; cond; update) 循环替代")
 
     def compile_break(self, stmt):
         if not self.loop_labels:
@@ -650,11 +681,11 @@ class Compiler:
         elif isinstance(expr, AnonymouFunc):
             self.compile_anonymou(expr)
         elif isinstance(expr, ListLiteral):
-            raise CompileError("列表字面量暂不支持编译")
+            self.compile_list_literal(expr)
         elif isinstance(expr, NewExpr):
             raise CompileError("new 表达式暂不支持编译")
         elif isinstance(expr, GetAttr):
-            raise CompileError("属性访问暂不支持编译")
+            self.compile_getattr(expr)
         else:
             raise CompileError(f"不支持的表达式: {type(expr).__name__}")
 
@@ -894,6 +925,33 @@ class Compiler:
         func_idx = self._add_anonymous_func(expr)
         self.emit(OP_ANON)
         self.emit_u32(func_idx)
+
+    def compile_list_literal(self, expr):
+        """编译特殊列表（字典/对象）['a':1, 'b':[1,2,3]]"""
+        # entries 是 (key_or_None, value_node) 列表
+        # 只编译有键的条目（字典/对象模式）
+        pairs = [(k, v) for k, v in expr.entries if k is not None]
+        for key_str, val_ast in pairs:
+            self.compile_expression(val_ast)   # 值先入栈
+            # key 已经是字符串（解析器预处理好的），直接放入常量池
+            idx = self.add_string(key_str)
+            self.emit(OP_SCONST)
+            self.emit_u32(idx)
+
+        # 发射 OP_NEWOBJ n
+        n = len(pairs)
+        self.emit(OP_NEWOBJ)
+        self.emit(n)
+
+    def compile_getattr(self, expr):
+        """编译属性访问 obj.attr"""
+        # 编译对象表达式
+        self.compile_expression(expr.obj)
+        # attr 是属性名（字符串），存入字符串池
+        attr_name = expr.attr
+        str_idx = self.add_string(attr_name)
+        self.emit(OP_GETATTR)
+        self.emit_u32(str_idx)
 
     # ─── 输出 ───────────────────────────────────
     def write_dance(self, path: str):

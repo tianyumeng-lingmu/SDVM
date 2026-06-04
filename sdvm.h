@@ -114,6 +114,11 @@ typedef enum {
     /* I/O 0x70-0x7F */
     OP_PRINT     = 0x70,
     OP_SCAN      = 0x71,
+
+    /* 对象操作 0x60-0x6F */
+    OP_NEWOBJ    = 0x60,   /* +1: num_pairs, 从栈取 key-value 对创建对象 */
+    OP_GETATTR   = 0x61,   /* +4: strpool_idx, 读取对象属性 */
+    OP_SETATTR   = 0x62,   /* +4: strpool_idx, 设置对象属性 */
 } OpCode;
 
 /* ═══════════════════════════════════════════════
@@ -134,7 +139,12 @@ typedef enum {
     BIF_NET_READLINE = 12, /* net_readline(handle): read line */
     BIF_NET_WRITE = 13, /* net_write(handle, str): send data */
     BIF_NET_CLOSE = 14, /* net_close(handle): close handle */
-    BIF_COUNT   = 15,
+    BIF_JSON_ENCODE = 16, /* json_encode(val): 值→JSON 字符串 */
+    BIF_JSON_DECODE = 17, /* json_decode(str): JSON 字符串→值 */
+    BIF_FILE_READ   = 18, /* file_read(path): 读取整个文件→字符串 */
+    BIF_FILE_WRITE  = 19, /* file_write(path, content): 写入字符串到文件 */
+    BIF_FILE_EXISTS = 20, /* file_exists(path): 检查文件是否存在→bool */
+    BIF_COUNT   = 21,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
@@ -148,6 +158,7 @@ typedef enum {
     VAL_STRING,    /* owned by const pool OR dynamically allocated */
     VAL_NULL,
     VAL_FUNC,      /* 函数引用 (用于匿名字面量) */
+    VAL_OBJECT,    /* 对象 */
 } ValueType;
 
 typedef struct {
@@ -158,8 +169,25 @@ typedef struct {
         uint8_t     bool_val;
         const char* str_val;
         uint32_t    func_idx;  /* 用于 VAL_FUNC */
+        void*       ptr_val;   /* 用于 VAL_OBJECT */
     } data;
 } Value;
+
+/* ═══════════════════════════════════════════════
+   对象 (动态键值对)
+   ═══════════════════════════════════════════════ */
+/* 对象键值对 */
+typedef struct {
+    char* key;     /* 堆分配的 key 字符串 */
+    Value  value;
+} ObjectEntry;
+
+/* 简单对象 (动态键值对数组) */
+typedef struct {
+    ObjectEntry* entries;
+    int count;
+    int capacity;
+} Object;
 
 /* ═══════════════════════════════════════════════
    函数表 & 调用栈
@@ -224,6 +252,9 @@ typedef struct {
     /* 网络套接字表 */
     uintptr_t sockets[64];    /* 套接字句柄，0 = 空闲 */
     int       socket_count;   /* 已分配套接字数 */
+
+    Object*   objects[256];   /* 跟踪分配的对象，用于清理 */
+    int       object_count;
 } SDVM;
 
 /* ═══════════════════════════════════════════════
