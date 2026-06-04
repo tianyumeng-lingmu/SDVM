@@ -1231,6 +1231,67 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         break;
     }
 
+    case BIF_STR_SPLIT: {
+        /* str_split(s, delimiter): 按分隔符分割字符串，返回带数字键的对象 */
+        if (argc != 2 || vm->sp < 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_split 需要 2 个参数 (str, delimiter)");
+            vm->has_error = 1; return -1;
+        }
+        Value delim_v = vm->stack[vm->sp--];
+        Value str_v = vm->stack[vm->sp--];
+        if (str_v.type != VAL_STRING || delim_v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "str_split: 参数必须是字符串");
+            vm->has_error = 1; return -1;
+        }
+        const char* s = str_v.data.str_val ? str_v.data.str_val : "";
+        const char* delim = delim_v.data.str_val ? delim_v.data.str_val : "";
+        size_t delim_len = strlen(delim);
+
+        Object* obj = obj_create(vm);
+        if (!obj) { vm->has_error = 1; return -1; }
+
+        if (delim_len == 0) {
+            /* 空分隔符：拆成单个字符 */
+            size_t len = strlen(s);
+            for (size_t i = 0; i < len; i++) {
+                char buf[2] = { s[i], '\0' };
+                char key[16];
+                snprintf(key, sizeof(key), "%zu", i);
+                Value val; val.type = VAL_STRING; val.data.str_val = sdvm_heap_strdup(vm, buf);
+                obj_set(obj, key, val);
+            }
+        } else {
+            /* 按分隔符分割 */
+            int part_idx = 0;
+            const char* start = s;
+            while (1) {
+                const char* found = strstr(start, delim);
+                size_t part_len;
+                if (found) {
+                    part_len = (size_t)(found - start);
+                } else {
+                    part_len = strlen(start);
+                }
+                char* part = (char*)malloc(part_len + 1);
+                if (!part) { obj_free(obj); vm->has_error = 1; return -1; }
+                memcpy(part, start, part_len);
+                part[part_len] = '\0';
+                char key[16];
+                snprintf(key, sizeof(key), "%d", part_idx);
+                Value val; val.type = VAL_STRING; val.data.str_val = sdvm_heap_strdup(vm, part);
+                obj_set(obj, key, val);
+                free(part);
+
+                if (!found) break;
+                part_idx++;
+                start = found + delim_len;
+            }
+        }
+        Value r; r.type = VAL_OBJECT; r.data.ptr_val = obj;
+        PUSH(r);
+        break;
+    }
+
     default:
         snprintf(vm->error_msg, sizeof(vm->error_msg),
                  "未知的内置函数索引: %d", bif_idx);
@@ -1919,9 +1980,18 @@ int sdvm_run(SDVM* vm) {
                 char buf[2] = { s[i], '\0' };
                 Value r; r.type = VAL_STRING; r.data.str_val = sdvm_heap_strdup(vm, buf);
                 PUSH(r);
-            } else if (obj.type == VAL_OBJECT && idx.type == VAL_STRING) {
-                /* 对象下标: obj["key"] */
-                const char* key = idx.data.str_val ? idx.data.str_val : "";
+            } else if (obj.type == VAL_OBJECT) {
+                const char* key = "";
+                char key_buf[32];
+                if (idx.type == VAL_STRING) {
+                    key = idx.data.str_val ? idx.data.str_val : "";
+                } else if (idx.type == VAL_INT) {
+                    snprintf(key_buf, sizeof(key_buf), "%lld", (long long)idx.data.int_val);
+                    key = key_buf;
+                } else {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 对象索引类型不支持 (idx=%d)", idx.type);
+                    vm->has_error = 1; return -1;
+                }
                 Value r = obj_get((Object*)obj.data.ptr_val, key);
                 if (r.type == VAL_NULL) {
                     snprintf(vm->error_msg, sizeof(vm->error_msg), "GETINDEX: 键 '%s' 不存在", key);
@@ -1947,8 +2017,18 @@ int sdvm_run(SDVM* vm) {
             if (obj.type == VAL_STRING) {
                 snprintf(vm->error_msg, sizeof(vm->error_msg), "SETINDEX: 字符串不可变，不能通过下标修改");
                 vm->has_error = 1; return -1;
-            } else if (obj.type == VAL_OBJECT && idx.type == VAL_STRING) {
-                const char* key = idx.data.str_val ? idx.data.str_val : "";
+            } else if (obj.type == VAL_OBJECT) {
+                const char* key = "";
+                char key_buf[32];
+                if (idx.type == VAL_STRING) {
+                    key = idx.data.str_val ? idx.data.str_val : "";
+                } else if (idx.type == VAL_INT) {
+                    snprintf(key_buf, sizeof(key_buf), "%lld", (long long)idx.data.int_val);
+                    key = key_buf;
+                } else {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "SETINDEX: 对象索引类型不支持 (idx=%d)", idx.type);
+                    vm->has_error = 1; return -1;
+                }
                 obj_set((Object*)obj.data.ptr_val, key, val);
                 PUSH(val);
             } else {

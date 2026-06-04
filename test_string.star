@@ -67,5 +67,21 @@ main {
     nested_a = info["nested"]["a"];
     see("info['nested']['a'] = "); see(nested_a); see("\n");
 
+    // 测试11: str_split + obj[int] 下标
+    parts = str_split("a,b,c", ",");
+    see("split ',': "); see(parts[0]); see(parts[1]); see(parts[2]); see("\n");
+
+    // 测试12: 解析一行输入
+    line = "GET /index.html HTTP/1.1";
+    fields = str_split(line, " ");
+    see("split line: "); see(fields[0]); see(", "); see(fields[1]); see(", "); see(fields[2]); see("\n");
+
+    // 测试13: 空分隔符（每字符分割）
+    chars = str_split("ABC", "");
+    see("split empty: "); see(chars[0]); see(chars[1]); see(chars[2]); see("\n");
+
+    // 测试14: obj[str] + obj[int] 下标都可用
+    see("parts[0](int)="); see(parts[0]); see(' parts["0"](str)='); see(parts["0"]); see("\n");
+
     see("\n=== 全部测试通过! ===\n");
 }

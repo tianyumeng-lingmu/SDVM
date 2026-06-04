@@ -142,6 +142,7 @@ BIF_STR_CONTAINS = 24  # str_contains(s, pattern) → bool
 BIF_STR_TRIM     = 25  # str_trim(s) → str
 BIF_STR_UPPER    = 26  # str_upper(s) → str
 BIF_STR_LOWER    = 27  # str_lower(s) → str
+BIF_STR_SPLIT    = 28  # str_split(s, delimiter) → object
 
 BIF_MAP = {
     'see': BIF_SEE,
@@ -170,6 +171,7 @@ BIF_MAP = {
     'str_trim':    BIF_STR_TRIM,
     'str_upper':   BIF_STR_UPPER,
     'str_lower':   BIF_STR_LOWER,
+    'str_split':   BIF_STR_SPLIT,
 }
 
 

@@ -153,7 +153,8 @@ typedef enum {
     BIF_STR_TRIM    = 25, /* str_trim(s): 去除前后空白 */
     BIF_STR_UPPER   = 26, /* str_upper(s): 转大写 */
     BIF_STR_LOWER   = 27, /* str_lower(s): 转小写 */
-    BIF_COUNT   = 28,
+    BIF_STR_SPLIT   = 28, /* str_split(s, delimiter): 分割字符串成列表 */
+    BIF_COUNT   = 29,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
