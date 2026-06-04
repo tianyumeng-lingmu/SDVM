@@ -33,7 +33,7 @@ try:
     from parser import Parser
     from ast_nodes import (
         Program, StartBlock, MainBlock, Block,
-        VarDecl, Assign, SeeStmt, IfStmt, WhileStmt, ForStmt,
+        VarDecl, ConstDecl, Assign, SeeStmt, IfStmt, WhileStmt, ForStmt,
         ForeachStmt, CaseStmt, WhenClause,
         BreakStmt, ContinueStmt, CutDownStmt,
         BinaryOp, UnaryOp, Literal, Identifier,
@@ -229,13 +229,13 @@ class Compiler:
         self.errors = 0
         
         try:
-            # 编译 main 块中的语句
-            if ast.main_block:
-                self._compile_body(ast.main_block.statements)
-            
-            # 编译 start 块（初始值设定）
+            # 先编译 start 块（常量/初始值设定），让变量先分配
             if ast.start_block:
                 self._compile_body(ast.start_block.statements)
+            
+            # 再编译 main 块中的语句
+            if ast.main_block:
+                self._compile_body(ast.main_block.statements)
             
             # 最后 halt
             self.emit(OP_HALT)
@@ -251,6 +251,8 @@ class Compiler:
         """编译单个语句"""
         if isinstance(stmt, VarDecl):
             self.compile_var_decl(stmt)
+        elif isinstance(stmt, ConstDecl):
+            self.compile_var_decl(stmt)  # ConstDecl 和 VarDecl 编译方式相同
         elif isinstance(stmt, Assign):
             self.compile_assign(stmt)
         elif isinstance(stmt, SeeStmt):
