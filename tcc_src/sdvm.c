@@ -157,19 +157,18 @@ static Object* obj_copy(SDVM* vm, const Object* src) {
     return obj;
 }
 
-static Object* obj_deepcopy(SDVM* vm, const Object* src) {
-    Object* dst = obj_create(vm);
-    if (!dst) return NULL;
+static Object* obj_deep_copy(SDVM* vm, const Object* src) {
+    Object* obj = obj_create(vm);
+    if (!obj) return NULL;
     for (int i = 0; i < src->count; i++) {
-        Value v = src->entries[i].value;
-        if (v.type == VAL_OBJECT) {
-            Object* nested = obj_deepcopy(vm, (Object*)v.data.ptr_val);
-            if (!nested) return NULL;
-            v.data.ptr_val = nested;
+        Value val = src->entries[i].value;
+        if (val.type == VAL_OBJECT) {
+            Object* sub = obj_deep_copy(vm, (Object*)val.data.ptr_val);
+            val.data.ptr_val = sub;
         }
-        obj_set(dst, src->entries[i].key, v);
+        obj_set(obj, src->entries[i].key, val);
     }
-    return dst;
+    return obj;
 }
 
 /* ─── 字节序工具 (小端) ──────────────────────── */
@@ -1707,45 +1706,48 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
     }
 
     case BIF_CLONE: {
-        /* val.clone(): 浅拷贝语法糖 — 存入临时区再粘贴返回 */
+        /* copy.clone(a) / a.clone(): 存入临时区并粘贴返回 */
         if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_CLONE: 栈空"); vm->has_error = 1; return -1; }
-        s_copy_temp = vm->stack[vm->sp--];
-        PUSH(s_copy_temp);
+        Value cv = vm->stack[vm->sp--];
+        s_copy_temp = cv;
+        PUSH(cv);
         break;
     }
 
     case BIF_DEEPCLONE: {
-        /* val.deepclone(): 深拷贝语法糖 */
+        /* copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴返回 */
         if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_DEEPCLONE: 栈空"); vm->has_error = 1; return -1; }
-        Value v = vm->stack[vm->sp--];
-        if (v.type == VAL_OBJECT) {
-            Object* src = (Object*)v.data.ptr_val;
-            Object* dst = obj_deepcopy(vm, src);
-            if (!dst) { vm->has_error = 1; return -1; }
-            s_copy_temp.type = VAL_OBJECT;
-            s_copy_temp.data.ptr_val = dst;
+        Value src = vm->stack[vm->sp--];
+        Value dst;
+        if (src.type == VAL_OBJECT) {
+            Object* obj = obj_deep_copy(vm, (Object*)src.data.ptr_val);
+            if (!obj) { vm->has_error = 1; return -1; }
+            dst.type = VAL_OBJECT;
+            dst.data.ptr_val = obj;
         } else {
-            s_copy_temp = v;
+            dst = src;
         }
-        PUSH(s_copy_temp);
+        s_copy_temp = dst;
+        PUSH(dst);
         break;
     }
 
     case BIF_COPY_DEEPCOPY: {
-        /* copy.deepcopy(val): 深拷贝存入临时区，不返回值 */
+        /* copy.deepcopy(a): 深拷贝存入临时区 */
         if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_COPY_DEEPCOPY: 栈空"); vm->has_error = 1; return -1; }
-        Value dv = vm->stack[vm->sp--];
-        if (dv.type == VAL_OBJECT) {
-            Object* src = (Object*)dv.data.ptr_val;
-            Object* dst = obj_deepcopy(vm, src);
-            if (!dst) { vm->has_error = 1; return -1; }
-            s_copy_temp.type = VAL_OBJECT;
-            s_copy_temp.data.ptr_val = dst;
+        Value src = vm->stack[vm->sp--];
+        Value dst;
+        if (src.type == VAL_OBJECT) {
+            Object* obj = obj_deep_copy(vm, (Object*)src.data.ptr_val);
+            if (!obj) { vm->has_error = 1; return -1; }
+            dst.type = VAL_OBJECT;
+            dst.data.ptr_val = obj;
         } else {
-            s_copy_temp = dv;
+            dst = src;
         }
-        Value dcr; dcr.type = VAL_NULL;
-        PUSH(dcr);
+        s_copy_temp = dst;
+        Value cr; cr.type = VAL_NULL;
+        PUSH(cr);
         break;
     }
 

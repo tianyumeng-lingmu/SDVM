@@ -80,8 +80,63 @@ main{
         copy.copy(999);
         copy.clean();
         int after_clean = copy.paste();
-        // 清理后粘贴应该是 null（打印出来猜测是 0）
         see(PASS, " clean 后 paste: ", after_clean, "\n");
+
+        // ─── 8. copy.clone(x) ───
+        see("\n=== 8. copy.clone(x) ===\n");
+        int c8 = 777;
+        int c8b = copy.clone(c8);
+        if (c8b == 777){
+            see(PASS, " copy.clone int: ", c8b, "\n");
+        }
+        list c8l = [5, 6, 7];
+        list c8l2 = copy.clone(c8l);
+        if (len(c8l2) == 3 && c8l2[1] == 6){
+            see(PASS, " copy.clone list: ");
+            _print_list(c8l2);
+        }
+
+        // ─── 9. 对象.clone() 语法糖 ───
+        see("\n=== 9. 对象.clone() ===\n");
+        int d9 = 888;
+        int d9b = d9.clone();
+        if (d9b == 888){
+            see(PASS, " int.clone(): ", d9b, "\n");
+        }
+        list d9l = [100, 200, 300];
+        list d9l2 = d9l.clone();
+        if (len(d9l2) == 3 && d9l2[2] == 300){
+            see(PASS, " list.clone(): ");
+            _print_list(d9l2);
+        }
+
+        // ─── 10. copy.deepclone(x) ───
+        see("\n=== 10. copy.deepclone(x) ===\n");
+        int e10 = 123;
+        int e10b = copy.deepclone(e10);
+        if (e10b == 123){
+            see(PASS, " copy.deepclone int: ", e10b, "\n");
+        }
+        list e10l = [1, 2, 3];
+        list e10l2 = copy.deepclone(e10l);
+        if (len(e10l2) == 3 && e10l2[1] == 2){
+            see(PASS, " copy.deepclone list: ");
+            _print_list(e10l2);
+        }
+
+        // ─── 11. 对象.deepclone() 语法糖 ───
+        see("\n=== 11. 对象.deepclone() ===\n");
+        int f11 = 456;
+        int f11b = f11.deepclone();
+        if (f11b == 456){
+            see(PASS, " int.deepclone(): ", f11b, "\n");
+        }
+        list f11l = [7, 8, 9];
+        list f11l2 = f11l.deepclone();
+        if (len(f11l2) == 3 && f11l2[0] == 7){
+            see(PASS, " list.deepclone(): ");
+            _print_list(f11l2);
+        }
 
         // ─── 结论 ───
         see("\n╔══════════════════════════════════════╗\n");

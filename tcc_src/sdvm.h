@@ -168,9 +168,9 @@ typedef enum {
     BIF_COPY_COPY   = 40, /* copy.copy(a): 存入临时区 */
     BIF_COPY_PASTE  = 41, /* copy.paste(): 粘贴返回临时区对象 */
     BIF_COPY_CLEAN  = 42, /* copy.clean(): 清除临时区 */
-    BIF_CLONE       = 43, /* val.clone(): 浅拷贝语法糖 */
-    BIF_DEEPCLONE   = 44, /* val.deepclone(): 深拷贝语法糖 */
-    BIF_COPY_DEEPCOPY = 45, /* copy.deepcopy(val): 深拷贝存入临时区 */
+    BIF_CLONE       = 43, /* copy.clone(a) / a.clone(): 存入临时区并粘贴返回 */
+    BIF_DEEPCLONE   = 44, /* copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴返回 */
+    BIF_COPY_DEEPCOPY = 45,/* copy.deepcopy(a): 深拷贝存入临时区 */
     BIF_COUNT   = 46,
 } BifIndex;
 
