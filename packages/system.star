@@ -77,6 +77,13 @@ thing GetLocalTimeStr() {
     return 0;
 }
 
+// 系统运行时间（秒）
+thing uptime() {
+    int k = ffi_load("kernel32.dll");
+    int ms = ffi_call(k, "GetTickCount64", "i");
+    return ms / 1000;
+}
+
 // ─── 蜂鸣/声音 ───────────────────────────────
 
 // 蜂鸣 (频率 Hz, 持续毫秒)
@@ -93,4 +100,27 @@ thing exit(exit_code) {
     int k = ffi_load("kernel32.dll");
     ffi_call(k, "ExitProcess", "v", exit_code);
     return(0);  // 实际不会执行，ExitProcess 不返回
+}
+
+// ─── 随机数 ──────────────────────────────────
+
+// 设置随机数种子
+thing srandom(seed) {
+    int m = ffi_load("msvcrt.dll");
+    ffi_call(m, "srand", "v", seed);
+    return 0;
+}
+
+// 获取随机数 (0..32767)
+thing random() {
+    int m = ffi_load("msvcrt.dll");
+    return ffi_call(m, "rand", "i");
+}
+
+// 获取指定范围随机整数 [min, max]
+thing random_range(min, max) {
+    int m = ffi_load("msvcrt.dll");
+    int r = ffi_call(m, "rand", "i");
+    int range = max - min + 1;
+    return min + (r % range);
 }
