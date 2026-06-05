@@ -33,13 +33,15 @@ life MyLife {
 }
 
 main {
-    see("return validation test\n");
-    int r1 = func_if_return(5);
-    see(r1);
-    see("\n");
-    int r2 = func_loop_return();
-    see(r2);
-    see("\n");
-    func_null_return();
-    see("OK\n");
+    thing main() {
+        see("return validation test\n");
+        int r1 = func_if_return(5);
+        see(r1);
+        see("\n");
+        int r2 = func_loop_return();
+        see(r2);
+        see("\n");
+        func_null_return();
+        see("OK\n");
+    }
 }

@@ -4,8 +4,9 @@ start {
 }
 
 main {
-    int pid = GetInfo();
-    see("Main PID = "); see(pid); see("\n");
-
-    see("包依赖测试通过!\n");
+    thing main() {
+        int pid = GetInfo();
+        see("Main PID = "); see(pid); see("\n");
+                see("包依赖测试通过!\n");
+    }
 }

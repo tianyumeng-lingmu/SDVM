@@ -40,9 +40,11 @@ thing demo() {
 }
 
 main {
-    see("Function Test Starting...\n");
-    demo();
-    see("Test Complete!\n");
-    int end = base + 90;
-    see("base + 90 = ", end, "\n");
+    thing main() {
+        see("Function Test Starting...\n");
+        demo();
+        see("Test Complete!\n");
+        int end = base + 90;
+        see("base + 90 = ", end, "\n");
+    }
 }

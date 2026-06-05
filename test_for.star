@@ -5,7 +5,9 @@ thing greet(name, count) {
     return(null);
 }
 main {
-    see("=== For loop test ===\n");
-    greet("World", 2);
-    see("Done!\n");
+    thing main() {
+        see("=== For loop test ===\n");
+        greet("World", 2);
+        see("Done!\n");
+    }
 }

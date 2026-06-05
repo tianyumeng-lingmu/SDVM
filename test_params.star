@@ -7,9 +7,11 @@ thing greet(name, count) {
     return(null);
 }
 main {
-    see("=== Test positional args ===\n");
-    greet("World", 3);
-    see("=== Test named args ===\n");
-    greet(count=2, name="Alice");
-    see("Done!\n");
+    thing main() {
+        see("=== Test positional args ===\n");
+        greet("World", 3);
+        see("=== Test named args ===\n");
+        greet(count=2, name="Alice");
+        see("Done!\n");
+    }
 }

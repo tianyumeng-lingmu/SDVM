@@ -6,5 +6,7 @@ thing no_return_func(x) {
 }
 
 main {
-    see("不应该运行到这里\n");
+    thing main() {
+        see("不应该运行到这里\n");
+    }
 }

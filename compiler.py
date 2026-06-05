@@ -422,49 +422,67 @@ class Compiler:
         self.errors = 0
         
         try:
-            # ★ 文件级约束检查：一个文件不能同时有 lifecycle 块和函数声明
-            has_lifecycle = ast.start_block is not None or ast.main_block is not None
-            has_funcs = len(ast.func_decls) > 0
-            if has_lifecycle and has_funcs:
-                raise CompileError(
-                    "文件不能同时包含 start/main 命途块和 thing 函数声明。"
-                    "请将函数分离到独立的包文件中。")
+            # ★ 文件级约束检查
+            # 有 main 命途的文件，life 只能放在 main 命途内部
+            if ast.main_block:
+                for decl in ast.func_decls:
+                    if isinstance(decl, LifeDecl):
+                        raise CompileError(
+                            "life 命途不能定义在 main 命途同级，请放入 main 命途内部")
             if ast.main_block and ast.start_block is None:
                 raise CompileError(
                     "main 命途必须与 start 命途同时存在")
 
-            # 0. 如果只有 lifecycle（没有函数），确保 func_defs 包含 main
-            if not has_funcs:
-                pass  # func 0 就是 main，不需要额外处理
-
-            # 收集模块级函数声明并验证
+            # 收集模块级函数声明并验证（顶层 thing/life 声明）
             func_index = 1  # index 0 是 main
             for decl in ast.func_decls:
-                # 验证函数必须包含 return() 语句
-                if not self._has_return_in_body(decl.body):
-                    raise CompileError(
-                        f"函数 '{decl.name}' 缺少 return() 语句 — "
-                        f"所有模块级 thing（函数）必须有 return() 语句，即使只是 return(null);"
-                    )
-                func = FuncDef(decl.name, decl.params, decl.body)
-                self.func_defs.append(func)
-                self.func_map[decl.name] = func_index
-                func_index += 1
-            
-            # 1. 先编译 start 块
+                if isinstance(decl, LifeDecl):
+                    # 没有 main 命途时，life 声明跳过（暂不支持编译）
+                    pass
+                elif isinstance(decl, ThingDecl):
+                    if not self._has_return_in_body(decl.body):
+                        raise CompileError(
+                            f"函数 '{decl.name}' 缺少 return() 语句 — "
+                            f"所有模块级 thing（函数）必须有 return() 语句，即使只是 return(null);"
+                        )
+                    func = FuncDef(decl.name, decl.params, decl.body)
+                    self.func_defs.append(func)
+                    self.func_map[decl.name] = func_index
+                    func_index += 1
+
+            # 1. 编译 start 块
             if ast.start_block:
                 self._compile_body(ast.start_block.statements)
-            
-            # 2. 再编译 main 块
+
+            # 2. 处理 main 命途：寻找 thing main() 作为主程序入口
+            main_entry_body = None
             if ast.main_block:
-                self._compile_body(ast.main_block.statements)
-            
+                for stmt in ast.main_block.statements:
+                    if isinstance(stmt, ThingDecl):
+                        if stmt.name == 'main':
+                            main_entry_body = stmt.body
+                        else:
+                            # main 命途内的其他 thing 声明 → 编译为独立函数
+                            func = FuncDef(stmt.name, stmt.params, stmt.body)
+                            self.func_defs.append(func)
+                            self.func_map[stmt.name] = func_index
+                            func_index += 1
+                    elif isinstance(stmt, LifeDecl):
+                        pass  # life 暂不支持编译
+
+                if main_entry_body is None:
+                    raise CompileError(
+                        "main 命途必须包含 thing main() 作为主程序入口")
+
+                # 编译 main 入口函数体
+                self._compile_body(main_entry_body)
+
             # 3. HALT 结束主代码
             self.emit(OP_HALT)
-            
+
             # 4. 解析主代码回填
             self.resolve_backpatches()
-            
+
             # 5. 编译各个函数
             for func in self.func_defs:
                 self._push_func_context(func)

@@ -7,7 +7,9 @@ thing greet(name, count) {
 }
 
 main {
-    see("start\n");
-    greet("world", 3);
-    see("done\n");
+    thing main() {
+        see("start\n");
+        greet("world", 3);
+        see("done\n");
+    }
 }
