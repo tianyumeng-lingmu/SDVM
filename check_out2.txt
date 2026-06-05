@@ -1,0 +1,49 @@
+File size: 170 bytes
+Magic: b'SDNC'
+Version: 2
+String pool count: 4
+  [0] len=6 'start
+'
+  [1] len=5 'world'
+  [2] len=5 'done
+'
+  [3] len=1 '
+'
+Func table count: 2
+  func[0]: name_idx=4294967295, args=0, locals=0, code_offset=0
+  func[1]: name_idx=4, args=2, locals=3, code_offset=34
+Code size: 85 bytes (remaining in file: 85)
+
+Disassembly (85 bytes):
+  [0000] SCONST #0
+  [0005] BIF see(1)
+  [0008] SCONST #1
+  [0013] ICONST 3
+  [0018] CALL func[1] args=2
+  [0024] POP
+  [0025] SCONST #2
+  [0030] BIF see(1)
+  [0033] HALT
+  [0034] ICONST 0
+  [0039] STORE r2
+  [0041] LOAD r2
+  [0043] LOAD r1
+  [0045] LT
+  [0046] JIF +30
+  [0051] LOAD r0
+  [0053] BIF see(1)
+  [0056] SCONST #3
+  [0061] BIF see(1)
+  [0064] LOAD r2
+  [0066] DUP
+  [0067] ICONST 1
+  [0072] ADD
+  [0073] STORE r2
+  [0075] POP
+  [0076] JMP -40
+  [0081] NULL
+  [0082] RET
+  [0083] NULL
+  [0084] RET
+
+Total disassembled: 85 / 85 bytes

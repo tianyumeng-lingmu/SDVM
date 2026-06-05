@@ -1,0 +1,43 @@
+Running: D:\stay\SDVM\SDVM.exe D:\stay\SDVM\test_debug.dance
+
+=== STDOUT ===
+; SDVM 加载成功: code_size=85, strpool_count=4
+; [0000] SCONST #0
+; [0005] BIF bif:0 args:1
+start
+; [0008] SCONST #1
+; [0013] ICONST 3
+; [0018] CALL func:1 args:2
+; [0034] ICONST 0
+; [0039] STORE r2
+; [0041] LOAD r2
+; [0043] LOAD r1
+; [0045] LT
+; [0046] JIF +30
+; [0051] LOAD r0
+; [0053] BIF bif:0 args:1
+world; [0056] SCONST #3
+; [0061] BIF bif:0 args:1
+
+; [0064] LOAD r2
+; [0066] DUP
+; [0067] ICONST 1
+; [0072] ADD
+; [0073] STORE r2
+; [0075] POP
+; [0076] JMP -40
+; [0041] LOAD r2
+; [0043] LOAD r1
+; [0045] LT
+; [0046] JIF +30
+; [0081] NULL
+; [0082] RET
+; [0024] POP
+; [0025] SCONST #2
+; [0030] BIF bif:0 args:1
+done
+; [0033] HALT
+
+=== STDERR ===
+
+=== Return code: 0 ===

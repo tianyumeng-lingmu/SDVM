@@ -1,0 +1,135 @@
+; Loaded: code_size=358, strpool_count=22
+; [0000] ICONST 8080
+; [0005] STORE r0
+; [0007] SCONST #0
+; [0012] LOAD r0
+; [0014] SCONST #1
+; [0019] BIF bif:0 args:3
+webstar: 启动服务器在端口 8080
+; [0022] LOAD r0
+; [0024] CALL func:5 args:1
+; [0342] LOAD r0
+; [0344] BIF bif:10 args:1
+; [0347] RET
+; [0030] STORE r1
+; [0032] SCONST #2
+; [0037] LOAD r1
+; [0039] SCONST #1
+; [0044] BIF bif:0 args:3
+webstar: 服务器句柄 = 0
+; [0047] LOAD r1
+; [0049] CALL func:6 args:1
+; [0350] LOAD r0
+; [0352] BIF bif:11 args:1
+; [0355] RET
+; [0055] STORE r2
+; [0057] SCONST #3
+; [0062] LOAD r2
+; [0064] SCONST #1
+; [0069] BIF bif:0 args:3
+webstar: 收到连接，句柄 = 1
+; [0072] LOAD r2
+; [0074] CALL func:2 args:1
+; [0312] LOAD r0
+; [0314] BIF bif:12 args:1
+; [0317] RET
+; [0080] STORE r3
+; [0082] SCONST #4
+; [0087] LOAD r3
+; [0089] SCONST #1
+; [0094] BIF bif:0 args:3
+webstar: 收到请求行: GET / HTTP/1.1
+; [0097] ICONST 1
+; [0102] JIF +33
+; [0107] LOAD r2
+; [0109] CALL func:2 args:1
+; [0312] LOAD r0
+; [0314] BIF bif:12 args:1
+; [0317] RET
+; [0115] STORE r4
+; [0117] LOAD r4
+; [0119] SCONST #5
+; [0124] EQ
+; [0125] JIF +5
+; [0135] JMP -43
+; [0097] ICONST 1
+; [0102] JIF +33
+; [0107] LOAD r2
+; [0109] CALL func:2 args:1
+; [0312] LOAD r0
+; [0314] BIF bif:12 args:1
+; [0317] RET
+; [0115] STORE r4
+; [0117] LOAD r4
+; [0119] SCONST #5
+; [0124] EQ
+; [0125] JIF +5
+; [0135] JMP -43
+; [0097] ICONST 1
+; [0102] JIF +33
+; [0107] LOAD r2
+; [0109] CALL func:2 args:1
+; [0312] LOAD r0
+; [0314] BIF bif:12 args:1
+; [0317] RET
+; [0115] STORE r4
+; [0117] LOAD r4
+; [0119] SCONST #5
+; [0124] EQ
+; [0125] JIF +5
+; [0130] JMP +5
+; [0140] SCONST #6
+; [0145] STORE r5
+; [0147] ICONST 200
+; [0152] SCONST #7
+; [0157] LOAD r5
+; [0159] CALL func:1 args:3
+; [0213] SCONST #10
+; [0218] STORE r3
+; [0220] LOAD r3
+; [0222] LOAD r0
+; [0224] BIF bif:3 args:1
+; [0227] ADD
+; [0228] SCONST #11
+; [0233] ADD
+; [0234] STORE r3
+; [0236] LOAD r3
+; [0238] SCONST #12
+; [0243] ADD
+; [0244] LOAD r1
+; [0246] ADD
+; [0247] SCONST #13
+; [0252] ADD
+; [0253] STORE r3
+; [0255] LOAD r3
+; [0257] SCONST #14
+; [0262] ADD
+; [0263] LOAD r2
+; [0265] BIF bif:7 args:1
+; [0268] BIF bif:3 args:1
+; [0271] ADD
+; [0272] SCONST #13
+; [0277] ADD
+; [0278] STORE r3
+; [0280] LOAD r3
+; [0282] SCONST #15
+; [0287] ADD
+; [0288] STORE r3
+; [0290] LOAD r3
+; [0292] SCONST #13
+; [0297] ADD
+; [0298] STORE r3
+; [0300] LOAD r3
+; [0302] LOAD r2
+; [0304] ADD
+; [0305] STORE r3
+; [0307] LOAD r3
+; [0309] RET
+; [0165] STORE r6
+; [0167] LOAD r2
+; [0169] LOAD r6
+; [0171] CALL func:3 args:2
+; [0320] LOAD r0
+; [0322] LOAD r1
+; [0324] BIF bif:13 args:2
+; [0327] POP

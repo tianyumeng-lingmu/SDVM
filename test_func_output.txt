@@ -1,0 +1,14 @@
+Function Test Starting...
+=== Positional args ===
+Hello, World!
+Hello, World!
+Hello, World!
+=== Named args ===
+Hello, Alice!
+Hello, Alice!
+=== Return value ===
+15 + 27 = 42
+=== Inner variable ===
+100 + 50 = 150
+Test Complete!
+base + 90 = 100

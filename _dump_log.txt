@@ -1,0 +1,5 @@
+Parsing test_debug.star...
+Parsed OK
+Compiled: main_code=34B, errors=0
+func_defs=1
+Written to D:\stay\SDVM\bc_dump.txt

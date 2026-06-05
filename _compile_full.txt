@@ -1,0 +1,93 @@
+STDOUT:
+
+STDERR:
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:63: warning: WSAEINTR redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:64: warning: WSAEBADF redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:65: warning: WSAEACCES redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:66: warning: WSAEFAULT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:67: warning: WSAEINVAL redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:68: warning: WSAEMFILE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:69: warning: WSAEWOULDBLOCK redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:70: warning: WSAEINPROGRESS redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:71: warning: WSAEALREADY redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:72: warning: WSAENOTSOCK redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:73: warning: WSAEDESTADDRREQ redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:74: warning: WSAEMSGSIZE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:75: warning: WSAEPROTOTYPE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:76: warning: WSAENOPROTOOPT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:77: warning: WSAEPROTONOSUPPORT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:78: warning: WSAESOCKTNOSUPPORT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:79: warning: WSAEOPNOTSUPP redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:80: warning: WSAEPFNOSUPPORT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:81: warning: WSAEAFNOSUPPORT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:82: warning: WSAEADDRINUSE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:83: warning: WSAEADDRNOTAVAIL redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:84: warning: WSAENETDOWN redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:85: warning: WSAENETUNREACH redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:86: warning: WSAENETRESET redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:87: warning: WSAECONNABORTED redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:88: warning: WSAECONNRESET redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:89: warning: WSAENOBUFS redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:90: warning: WSAEISCONN redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:91: warning: WSAENOTCONN redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:92: warning: WSAESHUTDOWN redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:93: warning: WSAETOOMANYREFS redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:94: warning: WSAETIMEDOUT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:95: warning: WSAECONNREFUSED redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:96: warning: WSAELOOP redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:97: warning: WSAENAMETOOLONG redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:98: warning: WSAEHOSTDOWN redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:99: warning: WSAEHOSTUNREACH redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:100: warning: WSAENOTEMPTY redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:101: warning: WSAEPROCLIM redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:102: warning: WSAEUSERS redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:103: warning: WSAEDQUOT redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:104: warning: WSAESTALE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:105: warning: WSAEREMOTE redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:23:
+d:/stay/SDVM/tcc_src/winsock2.h:124: warning: MAKEWORD redefined
+
+Return code: 0

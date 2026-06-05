@@ -1,0 +1,136 @@
+=== STDOUT ===
+; SDVM 加载成功: code_size=85, strpool_count=4
+; [0000] SCONST #0="start
+"
+; [0005] BIF bif:0 args:1
+start
+; [0008] SCONST #1="world"
+; [0013] ICONST 3
+; [0018] CALL func:1 args:2
+  [DBG CALL] sp=1 ip=19 local_count=0
+  [DBG] stack[0..1]: str("world") int(3)
+  [DBG] locals[0..0]:
+; [0034] ICONST 0
+; [0039] STORE r2 <-int(0)
+  [DBG STORE] sp=0 ip=40 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=null
+; [0041] LOAD r2 =int(0)
+; [0043] LOAD r1 =int(3)
+; [0045] LT
+  [DBG LT] sp=1 ip=46 local_count=3
+  [DBG] stack[0..1]: int(0) int(3)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(0)
+; [0046] JIF +30 (->81)
+  [DBG JIF] sp=0 ip=47 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(0)
+; [0051] LOAD r0 =str("world")
+; [0053] BIF bif:0 args:1
+world; [0056] SCONST #3="
+"
+; [0061] BIF bif:0 args:1
+
+; [0064] LOAD r2 =int(0)
+; [0066] DUP
+  [DBG DUP] sp=0 ip=67 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(0)
+; [0067] ICONST 1
+; [0072] ADD
+  [DBG ADD] sp=2 ip=73 local_count=3
+  [DBG] stack[0..2]: int(0) int(0) int(1)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(0)
+; [0073] STORE r2 <-int(1)
+  [DBG STORE] sp=1 ip=74 local_count=3
+  [DBG] stack[0..1]: int(0) int(1)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(0)
+; [0075] POP
+; [0076] JMP -40 (->41)
+  [DBG JMP] sp=-1 ip=77 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0041] LOAD r2 =int(1)
+; [0043] LOAD r1 =int(3)
+; [0045] LT
+  [DBG LT] sp=1 ip=46 local_count=3
+  [DBG] stack[0..1]: int(1) int(3)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0046] JIF +30 (->81)
+  [DBG JIF] sp=0 ip=47 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0051] LOAD r0 =str("world")
+; [0053] BIF bif:0 args:1
+world; [0056] SCONST #3="
+"
+; [0061] BIF bif:0 args:1
+
+; [0064] LOAD r2 =int(1)
+; [0066] DUP
+  [DBG DUP] sp=0 ip=67 local_count=3
+  [DBG] stack[0..0]: int(1)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0067] ICONST 1
+; [0072] ADD
+  [DBG ADD] sp=2 ip=73 local_count=3
+  [DBG] stack[0..2]: int(1) int(1) int(1)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0073] STORE r2 <-int(2)
+  [DBG STORE] sp=1 ip=74 local_count=3
+  [DBG] stack[0..1]: int(1) int(2)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(1)
+; [0075] POP
+; [0076] JMP -40 (->41)
+  [DBG JMP] sp=-1 ip=77 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0041] LOAD r2 =int(2)
+; [0043] LOAD r1 =int(3)
+; [0045] LT
+  [DBG LT] sp=1 ip=46 local_count=3
+  [DBG] stack[0..1]: int(2) int(3)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0046] JIF +30 (->81)
+  [DBG JIF] sp=0 ip=47 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0051] LOAD r0 =str("world")
+; [0053] BIF bif:0 args:1
+world; [0056] SCONST #3="
+"
+; [0061] BIF bif:0 args:1
+
+; [0064] LOAD r2 =int(2)
+; [0066] DUP
+  [DBG DUP] sp=0 ip=67 local_count=3
+  [DBG] stack[0..0]: int(2)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0067] ICONST 1
+; [0072] ADD
+  [DBG ADD] sp=2 ip=73 local_count=3
+  [DBG] stack[0..2]: int(2) int(2) int(1)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0073] STORE r2 <-int(3)
+  [DBG STORE] sp=1 ip=74 local_count=3
+  [DBG] stack[0..1]: int(2) int(3)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(2)
+; [0075] POP
+; [0076] JMP -40 (->41)
+  [DBG JMP] sp=-1 ip=77 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(3)
+; [0041] LOAD r2 =int(3)
+; [0043] LOAD r1 =int(3)
+; [0045] LT
+  [DBG LT] sp=1 ip=46 local_count=3
+  [DBG] stack[0..1]: int(3) int(3)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(3)
+; [0046] JIF +30 (->81)
+  [DBG JIF] sp=0 ip=47 local_count=3
+  [DBG] stack[0..0]: bool(false)
+  [DBG] locals[0..2]: r0=str("world") r1=int(3) r2=int(3)
+; [0081] NUL
+=== STDERR ===
+
+return code: 0

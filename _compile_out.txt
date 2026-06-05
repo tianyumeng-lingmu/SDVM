@@ -1,0 +1,6 @@
+编译成功: d:\stay\SDVM\test_webstar.dance
+  字符串常量: 22
+  函数: 7 (main + 6 user)
+  字节码大小: 358 bytes (主代码: 213)
+  局部变量: 7
+Exit code: 0

@@ -1,0 +1,10 @@
+stdout: 
+stderr: warning: in the working copy of 'compiler.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'python/compiler.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'sdvm.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'sdvm.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test_func.star', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test_simple.star', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test_debug.star', LF will be replaced by CRLF the next time Git touches it
+
+rc: 0

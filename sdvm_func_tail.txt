@@ -1,0 +1,80 @@
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+
+=== STDERR ===
+运行时错误: 指令数超限 (1000000) — 可能死循环, ip=99
+
+=== Return code: 1 ===
+

@@ -1,0 +1,150 @@
+Running: D:\stay\SDVM\SDVM.exe D:\stay\SDVM\test_func.dance
+
+=== STDOUT ===
+; SDVM 加载成功: code_size=257, strpool_count=14
+; [0000] ICONST 10
+; [0005] STORE r0
+; [0007] SCONST #0
+; [0012] BIF bif:0 args:1
+Function Test Starting...
+; [0015] CALL func:3 args:0
+; [0117] SCONST #6
+; [0122] BIF bif:0 args:1
+=== Positional args ===
+; [0125] SCONST #7
+; [0130] ICONST 3
+; [0135] CALL func:1 args:2
+; [0056] ICONST 0
+; [0061] STORE r2
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32
+; [0073] SCONST #4
+; [0078] LOAD r0
+; [0080] SCONST #5
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2
+; [0090] DUP
+; [0091] ICONST 1
+; [0096] ADD
+; [0097] STORE r2
+; [0099] POP
+; [0100] JMP -42
+; [0063] LOAD r2
+; [0065] LOAD r1
+; [0067] LT
+; [0068] JIF +32

@@ -1,0 +1,3 @@
+Python working
+CWD: D:\stay
+Args: ['d:\\stay\\SDVM\\_test_minimal.py']

@@ -1,0 +1,17 @@
+Not found: C:\Program Files\Microsoft Visual Studio\2022\**\cl.exe
+Not found: C:\Program Files\Microsoft Visual Studio\2019\**\cl.exe
+Not found: C:\Program Files (x86)\Microsoft Visual Studio\**\cl.exe
+Not found: C:\Program Files\Microsoft Visual Studio\2022\**\MSBuild.exe
+Not found: C:\Program Files (x86)\Microsoft Visual Studio\**\MSBuild.exe
+Not found: C:\msys64\**\gcc.exe
+Not found: C:\msys64\**\clang.exe
+Not found: C:\msys64\**\g++.exe
+
+where cl: stdout=, stderr=INFO: Could not find files for the given pattern(s).
+
+
+where msbuild: stdout=, stderr=INFO: Could not find files for the given pattern(s).
+
+
+VSINSTALLDIR: NOT SET
+VSCMD_ARG_TGT_ARCH: NOT SET

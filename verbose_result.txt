@@ -1,0 +1,8 @@
+﻿python : subprocess.py:961: RuntimeWarning: line buffering (buffering=1) isn't supported in binary mode, the default bu
+ffer size will be used
+At line:1 char:223
++ ... } catch {}; python c:\Users\Administrator\.trae-cn\work\6a1fa87bcd6ea ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (subprocess.py:9...ze will be used:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

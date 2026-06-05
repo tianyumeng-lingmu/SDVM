@@ -1,0 +1,202 @@
+Strings: 14, Funcs: 4, Code: 257B
+  str[0]: 'Function Test Starting...\n'
+  str[1]: 'Test Complete!\n'
+  str[2]: 'base + 90 = '
+  str[3]: '\n'
+  str[4]: 'Hello, '
+  str[5]: '!\n'
+  str[6]: '=== Positional args ===\n'
+  str[7]: 'World'
+  str[8]: '=== Named args ===\n'
+  str[9]: 'Alice'
+  str[10]: '=== Return value ===\n'
+  str[11]: '15 + 27 = '
+  str[12]: '=== Inner variable ===\n'
+  str[13]: '100 + 50 = '
+  func[0]: name=<4294967295>, args=0, locals=2, code_offset=0
+  func[1]: name=<14>, args=2, locals=3, code_offset=56
+  func[2]: name=<15>, args=2, locals=2, code_offset=109
+  func[3]: name=<16>, args=0, locals=3, code_offset=117
+
+[0004] ICONST 10
+[0006] STORE r0 = 10
+[0011] SCONST #0 ('Function Test Starting...
+')
+[0014] BIF see(1)
+Function Test Starting...
+[0020] CALL func[3] args=0
+[0121] SCONST #6 ('=== Positional args ===
+')
+[0124] BIF see(1)
+=== Positional args ===
+[0129] SCONST #7 ('World')
+[0134] ICONST 3
+[0140] CALL func[1] args=2
+[0060] ICONST 0
+[0062] STORE r2 = 0
+[0064] LOAD r2 = 0
+[0066] LOAD r1 = 3
+[0067] LT
+[0072] JIF +32 (cond=1, truthy=True, target=0105)
+[0077] SCONST #4 ('Hello, ')
+[0079] LOAD r0 = str#7
+[0084] SCONST #5 ('!
+')
+[0087] BIF see(3)
+Hello, World!
+[0089] LOAD r2 = 0
+[0090] DUP
+[0095] ICONST 1
+[0096] ADD
+[0098] STORE r2 = 1
+[0099] POP
+[0104] JMP -42 (-> 0063)
+[0064] LOAD r2 = 1
+[0066] LOAD r1 = 3
+[0067] LT
+[0072] JIF +32 (cond=1, truthy=True, target=0105)
+[0077] SCONST #4 ('Hello, ')
+[0079] LOAD r0 = str#7
+[0084] SCONST #5 ('!
+')
+[0087] BIF see(3)
+Hello, World!
+[0089] LOAD r2 = 1
+[0090] DUP
+[0095] ICONST 1
+[0096] ADD
+[0098] STORE r2 = 2
+[0099] POP
+[0104] JMP -42 (-> 0063)
+[0064] LOAD r2 = 2
+[0066] LOAD r1 = 3
+[0067] LT
+[0072] JIF +32 (cond=1, truthy=True, target=0105)
+[0077] SCONST #4 ('Hello, ')
+[0079] LOAD r0 = str#7
+[0084] SCONST #5 ('!
+')
+[0087] BIF see(3)
+Hello, World!
+[0089] LOAD r2 = 2
+[0090] DUP
+[0095] ICONST 1
+[0096] ADD
+[0098] STORE r2 = 3
+[0099] POP
+[0104] JMP -42 (-> 0063)
+[0064] LOAD r2 = 3
+[0066] LOAD r1 = 3
+[0067] LT
+[0072] JIF +32 (cond=0, truthy=False, target=0105)
+[0105] NULL
+[0106] RET
+[0141] POP
+[0146] SCONST #8 ('=== Named args ===
+')
+[0149] BIF see(1)
+=== Named args ===
+[0154] SCONST #9 ('Alice')
+[0159] ICONST 2
+[0165] CALL func[1] args=2
+[0060] ICONST 0
+[0062] STORE r2 = 0
+[0064] LOAD r2 = 0
+[0066] LOAD r1 = 2
+[0067] LT
+[0072] JIF +32 (cond=1, truthy=True, target=0105)
+[0077] SCONST #4 ('Hello, ')
+[0079] LOAD r0 = str#9
+[0084] SCONST #5 ('!
+')
+[0087] BIF see(3)
+Hello, Alice!
+[0089] LOAD r2 = 0
+[0090] DUP
+[0095] ICONST 1
+[0096] ADD
+[0098] STORE r2 = 1
+[0099] POP
+[0104] JMP -42 (-> 0063)
+[0064] LOAD r2 = 1
+[0066] LOAD r1 = 2
+[0067] LT
+[0072] JIF +32 (cond=1, truthy=True, target=0105)
+[0077] SCONST #4 ('Hello, ')
+[0079] LOAD r0 = str#9
+[0084] SCONST #5 ('!
+')
+[0087] BIF see(3)
+Hello, Alice!
+[0089] LOAD r2 = 1
+[0090] DUP
+[0095] ICONST 1
+[0096] ADD
+[0098] STORE r2 = 2
+[0099] POP
+[0104] JMP -42 (-> 0063)
+[0064] LOAD r2 = 2
+[0066] LOAD r1 = 2
+[0067] LT
+[0072] JIF +32 (cond=0, truthy=False, target=0105)
+[0105] NULL
+[0106] RET
+[0166] POP
+[0171] SCONST #10 ('=== Return value ===
+')
+[0174] BIF see(1)
+=== Return value ===
+[0179] ICONST 15
+[0184] ICONST 27
+[0190] CALL func[2] args=2
+[0110] LOAD r0 = 15
+[0112] LOAD r1 = 27
+[0113] ADD
+[0114] RET
+[0192] STORE r0 = 42
+[0197] SCONST #11 ('15 + 27 = ')
+[0199] LOAD r0 = 42
+[0204] SCONST #3 ('
+')
+[0207] BIF see(3)
+15 + 27 = 42
+[0212] SCONST #12 ('=== Inner variable ===
+')
+[0215] BIF see(1)
+=== Inner variable ===
+[0220] ICONST 100
+[0222] STORE r1 = 100
+[0224] LOAD r1 = 100
+[0229] ICONST 50
+[0235] CALL func[2] args=2
+[0110] LOAD r0 = 100
+[0112] LOAD r1 = 50
+[0113] ADD
+[0114] RET
+[0237] STORE r2 = 150
+[0242] SCONST #13 ('100 + 50 = ')
+[0244] LOAD r2 = 150
+[0249] SCONST #3 ('
+')
+[0252] BIF see(3)
+100 + 50 = 150
+[0253] NULL
+[0254] RET
+[0021] POP
+[0026] SCONST #1 ('Test Complete!
+')
+[0029] BIF see(1)
+Test Complete!
+[0031] LOAD r0 = 10
+[0036] ICONST 90
+[0037] ADD
+[0039] STORE r1 = 100
+[0044] SCONST #2 ('base + 90 = ')
+[0046] LOAD r1 = 100
+[0051] SCONST #3 ('
+')
+[0054] BIF see(3)
+base + 90 = 100
+[0055] HALT
+
+Result: 0, insn_count: 152

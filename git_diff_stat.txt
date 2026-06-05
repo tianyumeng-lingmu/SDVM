@@ -1,0 +1,12 @@
+ compiler.py        | 36 +++++++++++++++++++++---------------
+ python/compiler.py | 40 +++++++++++++++++++++++-----------------
+ sdvm.c             | 17 ++++++++++++-----
+ sdvm.h             |  2 +-
+ test_simple.star   | 18 +++++++++---------
+ 5 files changed, 66 insertions(+), 47 deletions(-)
+
+warning: in the working copy of 'compiler.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'python/compiler.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'sdvm.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'sdvm.h', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test_simple.star', LF will be replaced by CRLF the next time Git touches it

@@ -1,0 +1,51 @@
+=== Test 1: No args ===
+STDOUT: [SDVM — Star Dance Virtual Machine v1.0
+Usage: sdvm <file.dance> [-v]
+  -v    enable instruction trace
+]
+STDERR: []
+Exit code: 1
+
+=== .dance file ===
+Path: d:\stay\SDVM\test_webstar.dance
+Size: 966 bytes
+Header hex: 53444e43020000001600000022000000
+
+=== Test 3: With .dance file ===
+STDOUT length: 277
+STDERR length: 21
+STDOUT: [; SDVM 加载成功: code_size=358, strpool_count=22
+; [0000] ICONST 8080
+; [0005] STORE r0
+; [0007] SCONST #0
+; [0012] LOAD r0
+; [0014] SCONST #1
+; [0019] BIF bif:0 args:3
+webstar: 启动服务器在端口 8080
+; [0022] LOAD r0
+; [0024] CALL func:5 args:1
+; [0342] LOAD r0
+; [0344] BIF bif:10 args:1
+]
+STDERR: [运行时错误: 未知 BIF 索引: 10
+]
+Exit code: 1
+
+=== SDVM.exe info ===
+Size: 39936 bytes
+Modified: 2026-06-04 12:05:57
+  BIF_SEE     = 0,   /* see(...): pop N args and print them */
+  BIF_INT     = 1,   /* int(x): convert to int64 */
+  BIF_FLOAT   = 2,   /* float(x): convert to double */
+  BIF_STR     = 3,   /* str(x): convert to string */
+  BIF_BOOL    = 4,   /* bool(x): convert to bool */
+  BIF_TYPE    = 5,   /* type(x): return type description */
+  BIF_ID      = 6,   /* ID(x): return unique id string */
+  BIF_LEN     = 7,   /* len(x): get length */
+  BIF_INSERT  = 8,   /* insert(prompt): read stdin string */
+  BIF_NET_START = 10, /* net_start(port): start TCP listener */
+  BIF_NET_ACCEPT = 11,/* net_accept(handle): accept connection */
+  BIF_NET_READLINE = 12, /* net_readline(handle): read line */
+  BIF_NET_WRITE = 13, /* net_write(handle, str): send data */
+  BIF_NET_CLOSE = 14, /* net_close(handle): close handle */
+  BIF_COUNT   = 15,

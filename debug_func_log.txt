@@ -1,0 +1,348 @@
+=== STDOUT ===
+; SDVM 加载成功: code_size=257, strpool_count=14
+; [0000] ICONST 10
+; [0005] STORE r0 <-int(10)
+  [DBG STORE] sp=0 ip=6 local_count=2
+  [DBG] stack[0..0]: int(10)
+  [DBG] locals[0..1]: r0=null r1=null
+; [0007] SCONST #0="Function Test Starting...
+"
+; [0012] BIF bif:0 args:1
+Function Test Starting...
+; [0015] CALL func:3 args:0
+  [DBG CALL] sp=-1 ip=16 local_count=2
+  [DBG] stack: empty
+  [DBG] locals[0..1]: r0=int(10) r1=null
+; [0117] SCONST #6="=== Positional args ===
+"
+; [0122] BIF bif:0 args:1
+=== Positional args ===
+; [0125] SCONST #7="World"
+; [0130] ICONST 3
+; [0135] CALL func:1 args:2
+  [DBG CALL] sp=1 ip=136 local_count=3
+  [DBG] stack[0..1]: str("World") int(3)
+  [DBG] locals[0..2]: r0=null r1=null r2=null
+; [0056] ICONST 0
+; [0061] STORE r2 <-int(0)
+  [DBG STORE] sp=0 ip=62 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=null
+; [0063] LOAD r2 =int(0)
+; [0065] LOAD r1 =int(3)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(0) int(3)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(0)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(0)
+; [0073] SCONST #4="Hello, "
+; [0078] LOAD r0 =str("World")
+; [0080] SCONST #5="!
+"
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2 =int(0)
+; [0090] DUP
+  [DBG DUP] sp=0 ip=91 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(0)
+; [0091] ICONST 1
+; [0096] ADD
+  [DBG ADD] sp=2 ip=97 local_count=3
+  [DBG] stack[0..2]: int(0) int(0) int(1)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(0)
+; [0097] STORE r2 <-int(1)
+  [DBG STORE] sp=1 ip=98 local_count=3
+  [DBG] stack[0..1]: int(0) int(1)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(0)
+; [0099] POP
+; [0100] JMP -42 (->63)
+  [DBG JMP] sp=-1 ip=101 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0063] LOAD r2 =int(1)
+; [0065] LOAD r1 =int(3)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(1) int(3)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0073] SCONST #4="Hello, "
+; [0078] LOAD r0 =str("World")
+; [0080] SCONST #5="!
+"
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2 =int(1)
+; [0090] DUP
+  [DBG DUP] sp=0 ip=91 local_count=3
+  [DBG] stack[0..0]: int(1)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0091] ICONST 1
+; [0096] ADD
+  [DBG ADD] sp=2 ip=97 local_count=3
+  [DBG] stack[0..2]: int(1) int(1) int(1)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0097] STORE r2 <-int(2)
+  [DBG STORE] sp=1 ip=98 local_count=3
+  [DBG] stack[0..1]: int(1) int(2)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(1)
+; [0099] POP
+; [0100] JMP -42 (->63)
+  [DBG JMP] sp=-1 ip=101 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0063] LOAD r2 =int(2)
+; [0065] LOAD r1 =int(3)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(2) int(3)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0073] SCONST #4="Hello, "
+; [0078] LOAD r0 =str("World")
+; [0080] SCONST #5="!
+"
+; [0085] BIF bif:0 args:3
+Hello, World!
+; [0088] LOAD r2 =int(2)
+; [0090] DUP
+  [DBG DUP] sp=0 ip=91 local_count=3
+  [DBG] stack[0..0]: int(2)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0091] ICONST 1
+; [0096] ADD
+  [DBG ADD] sp=2 ip=97 local_count=3
+  [DBG] stack[0..2]: int(2) int(2) int(1)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0097] STORE r2 <-int(3)
+  [DBG STORE] sp=1 ip=98 local_count=3
+  [DBG] stack[0..1]: int(2) int(3)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(2)
+; [0099] POP
+; [0100] JMP -42 (->63)
+  [DBG JMP] sp=-1 ip=101 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(3)
+; [0063] LOAD r2 =int(3)
+; [0065] LOAD r1 =int(3)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(3) int(3)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(3)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(false)
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(3)
+; [0105] NULL
+; [0106] RET
+  [DBG RET] sp=0 ip=107 local_count=3
+  [DBG] stack[0..0]: null
+  [DBG] locals[0..2]: r0=str("World") r1=int(3) r2=int(3)
+; [0141] POP
+; [0142] SCONST #8="=== Named args ===
+"
+; [0147] BIF bif:0 args:1
+=== Named args ===
+; [0150] SCONST #9="Alice"
+; [0155] ICONST 2
+; [0160] CALL func:1 args:2
+  [DBG CALL] sp=1 ip=161 local_count=3
+  [DBG] stack[0..1]: str("Alice") int(2)
+  [DBG] locals[0..2]: r0=null r1=null r2=null
+; [0056] ICONST 0
+; [0061] STORE r2 <-int(0)
+  [DBG STORE] sp=0 ip=62 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=null
+; [0063] LOAD r2 =int(0)
+; [0065] LOAD r1 =int(2)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(0) int(2)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(0)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(0)
+; [0073] SCONST #4="Hello, "
+; [0078] LOAD r0 =str("Alice")
+; [0080] SCONST #5="!
+"
+; [0085] BIF bif:0 args:3
+Hello, Alice!
+; [0088] LOAD r2 =int(0)
+; [0090] DUP
+  [DBG DUP] sp=0 ip=91 local_count=3
+  [DBG] stack[0..0]: int(0)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(0)
+; [0091] ICONST 1
+; [0096] ADD
+  [DBG ADD] sp=2 ip=97 local_count=3
+  [DBG] stack[0..2]: int(0) int(0) int(1)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(0)
+; [0097] STORE r2 <-int(1)
+  [DBG STORE] sp=1 ip=98 local_count=3
+  [DBG] stack[0..1]: int(0) int(1)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(0)
+; [0099] POP
+; [0100] JMP -42 (->63)
+  [DBG JMP] sp=-1 ip=101 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0063] LOAD r2 =int(1)
+; [0065] LOAD r1 =int(2)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(1) int(2)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(true)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0073] SCONST #4="Hello, "
+; [0078] LOAD r0 =str("Alice")
+; [0080] SCONST #5="!
+"
+; [0085] BIF bif:0 args:3
+Hello, Alice!
+; [0088] LOAD r2 =int(1)
+; [0090] DUP
+  [DBG DUP] sp=0 ip=91 local_count=3
+  [DBG] stack[0..0]: int(1)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0091] ICONST 1
+; [0096] ADD
+  [DBG ADD] sp=2 ip=97 local_count=3
+  [DBG] stack[0..2]: int(1) int(1) int(1)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0097] STORE r2 <-int(2)
+  [DBG STORE] sp=1 ip=98 local_count=3
+  [DBG] stack[0..1]: int(1) int(2)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(1)
+; [0099] POP
+; [0100] JMP -42 (->63)
+  [DBG JMP] sp=-1 ip=101 local_count=3
+  [DBG] stack: empty
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(2)
+; [0063] LOAD r2 =int(2)
+; [0065] LOAD r1 =int(2)
+; [0067] LT
+  [DBG LT] sp=1 ip=68 local_count=3
+  [DBG] stack[0..1]: int(2) int(2)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(2)
+; [0068] JIF +32 (->105)
+  [DBG JIF] sp=0 ip=69 local_count=3
+  [DBG] stack[0..0]: bool(false)
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(2)
+; [0105] NULL
+; [0106] RET
+  [DBG RET] sp=0 ip=107 local_count=3
+  [DBG] stack[0..0]: null
+  [DBG] locals[0..2]: r0=str("Alice") r1=int(2) r2=int(2)
+; [0166] POP
+; [0167] SCONST #10="=== Return value ===
+"
+; [0172] BIF bif:0 args:1
+=== Return value ===
+; [0175] ICONST 15
+; [0180] ICONST 27
+; [0185] CALL func:2 args:2
+  [DBG CALL] sp=1 ip=186 local_count=3
+  [DBG] stack[0..1]: int(15) int(27)
+  [DBG] locals[0..2]: r0=null r1=null r2=null
+; [0109] LOAD r0 =int(15)
+; [0111] LOAD r1 =int(27)
+; [0113] ADD
+  [DBG ADD] sp=1 ip=114 local_count=2
+  [DBG] stack[0..1]: int(15) int(27)
+  [DBG] locals[0..1]: r0=int(15) r1=int(27)
+; [0114] RET
+  [DBG RET] sp=0 ip=115 local_count=2
+  [DBG] stack[0..0]: int(42)
+  [DBG] locals[0..1]: r0=int(15) r1=int(27)
+; [0191] STORE r0 <-int(42)
+  [DBG STORE] sp=0 ip=192 local_count=3
+  [DBG] stack[0..0]: int(42)
+  [DBG] locals[0..2]: r0=null r1=null r2=null
+; [0193] SCONST #11="15 + 27 = "
+; [0198] LOAD r0 =int(42)
+; [0200] SCONST #3="
+"
+; [0205] BIF bif:0 args:3
+15 + 27 = 42
+; [0208] SCONST #12="=== Inner variable ===
+"
+; [0213] BIF bif:0 args:1
+=== Inner variable ===
+; [0216] ICONST 100
+; [0221] STORE r1 <-int(100)
+  [DBG STORE] sp=0 ip=222 local_count=3
+  [DBG] stack[0..0]: int(100)
+  [DBG] locals[0..2]: r0=int(42) r1=null r2=null
+; [0223] LOAD r1 =int(100)
+; [0225] ICONST 50
+; [0230] CALL func:2 args:2
+  [DBG CALL] sp=1 ip=231 local_count=3
+  [DBG] stack[0..1]: int(100) int(50)
+  [DBG] locals[0..2]: r0=int(42) r1=int(100) r2=null
+; [0109] LOAD r0 =int(100)
+; [0111] LOAD r1 =int(50)
+; [0113] ADD
+  [DBG ADD] sp=1 ip=114 local_count=2
+  [DBG] stack[0..1]: int(100) int(50)
+  [DBG] locals[0..1]: r0=int(100) r1=int(50)
+; [0114] RET
+  [DBG RET] sp=0 ip=115 local_count=2
+  [DBG] stack[0..0]: int(150)
+  [DBG] locals[0..1]: r0=int(100) r1=int(50)
+; [0236] STORE r2 <-int(150)
+  [DBG STORE] sp=0 ip=237 local_count=3
+  [DBG] stack[0..0]: int(150)
+  [DBG] locals[0..2]: r0=int(42) r1=int(100) r2=null
+; [0238] SCONST #13="100 + 50 = "
+; [0243] LOAD r2 =int(150)
+; [0245] SCONST #3="
+"
+; [0250] BIF bif:0 args:3
+100 + 50 = 150
+; [0253] NULL
+; [0254] RET
+  [DBG RET] sp=0 ip=255 local_count=3
+  [DBG] stack[0..0]: null
+  [DBG] locals[0..2]: r0=int(42) r1=int(100) r2=int(150)
+; [0021] POP
+; [0022] SCONST #1="Test Complete!
+"
+; [0027] BIF bif:0 args:1
+Test Complete!
+; [0030] LOAD r0 =int(10)
+; [0032] ICONST 90
+; [0037] ADD
+  [DBG ADD] sp=1 ip=38 local_count=2
+  [DBG] stack[0..1]: int(10) int(90)
+  [DBG] locals[0..1]: r0=int(10) r1=null
+; [0038] STORE r1 <-int(100)
+  [DBG STORE] sp=0 ip=39 local_count=2
+  [DBG] stack[0..0]: int(100)
+  [DBG] locals[0..1]: r0=int(10) r1=null
+; [0040] SCONST #2="base + 90 = "
+; [0045] LOAD r1 =int(100)
+; [0047] SCONST #3="
+"
+; [0052] BIF bif:0 args:3
+base + 90 = 100
+; [0055] HALT
+
+=== STDERR ===
+
+return code: 0

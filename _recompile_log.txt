@@ -1,0 +1,17 @@
+SDVM.exe not found
+
+Recompiling...
+TCC exit code: 1
+STDERR: In file included from d:/stay/SDVM/tcc_src/sdvm.c:18:
+d:/stay/SDVM/tcc_src/winsock2.h:69: warning: WSAEINTR redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:18:
+d:/stay/SDVM/tcc_src/winsock2.h:70: warning: WSAEBADF redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:18:
+d:/stay/SDVM/tcc_src/winsock2.h:71: warning: WSAEACCES redefined
+In file included from d:/stay/SDVM/tcc_src/sdvm.c:18:
+d:/stay/SDVM/tcc_src/winsock2.h:72: warning: WSAEFAULT redefined
+In file included from d:/s
+
+FAILED: SDVM.exe not created
+
+Testing...

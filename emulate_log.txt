@@ -1,0 +1,75 @@
+Strings: 4, Funcs: 2, Code: 85B
+[0004] SCONST #0 ('start
+')
+[0007] BIF see(1)
+start
+[0012] SCONST #1 ('world')
+[0017] ICONST 3
+[0023] CALL func[1] args=2
+[0038] ICONST 0
+[0040] STORE r2 = 0
+[0042] LOAD r2 = 0
+[0044] LOAD r1 = 3
+[0045] LT
+[0050] JIF +30 (cond=1, truthy=True, target=0081)
+[0052] LOAD r0 = str#1
+[0055] BIF see(1)
+world[0060] SCONST #3 ('
+')
+[0063] BIF see(1)
+
+[0065] LOAD r2 = 0
+[0066] DUP
+[0071] ICONST 1
+[0072] ADD
+[0074] STORE r2 = 1
+[0075] POP
+[0080] JMP -40 (-> 0041)
+[0042] LOAD r2 = 1
+[0044] LOAD r1 = 3
+[0045] LT
+[0050] JIF +30 (cond=1, truthy=True, target=0081)
+[0052] LOAD r0 = str#1
+[0055] BIF see(1)
+world[0060] SCONST #3 ('
+')
+[0063] BIF see(1)
+
+[0065] LOAD r2 = 1
+[0066] DUP
+[0071] ICONST 1
+[0072] ADD
+[0074] STORE r2 = 2
+[0075] POP
+[0080] JMP -40 (-> 0041)
+[0042] LOAD r2 = 2
+[0044] LOAD r1 = 3
+[0045] LT
+[0050] JIF +30 (cond=1, truthy=True, target=0081)
+[0052] LOAD r0 = str#1
+[0055] BIF see(1)
+world[0060] SCONST #3 ('
+')
+[0063] BIF see(1)
+
+[0065] LOAD r2 = 2
+[0066] DUP
+[0071] ICONST 1
+[0072] ADD
+[0074] STORE r2 = 3
+[0075] POP
+[0080] JMP -40 (-> 0041)
+[0042] LOAD r2 = 3
+[0044] LOAD r1 = 3
+[0045] LT
+[0050] JIF +30 (cond=0, truthy=False, target=0081)
+[0081] NULL
+[0082] RET
+[0024] POP
+[0029] SCONST #2 ('done
+')
+[0032] BIF see(1)
+done
+[0033] HALT
+
+Result: 0, insn_count: 62

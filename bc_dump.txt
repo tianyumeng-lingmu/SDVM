@@ -1,0 +1,44 @@
+=== test_debug.star ===
+String pool (4):
+  [0] 'start\n'
+  [1] 'world'
+  [2] 'done\n'
+  [3] '\n'
+
+Functions (2):
+  func[0]: offset=0, size=34, args=0, locals=0, name=None
+  func[1]: offset=34, size=51, args=2, locals=3, name=greet
+
+--- func[0]: (main) ---
+  [0000] SCONST #0
+  [0005] BIF see(1)
+  [0008] SCONST #1
+  [0013] ICONST 3
+  [0018] CALL func[1] args=2
+  [0024] POP
+  [0025] SCONST #2
+  [0030] BIF see(1)
+  [0033] HALT
+
+--- func[1]: greet ---
+  [0000] ICONST 0
+  [0005] STORE r2
+  [0007] LOAD r2
+  [0009] LOAD r1
+  [0011] LT
+  [0012] JIF +30 (->0047)
+  [0017] LOAD r0
+  [0019] BIF see(1)
+  [0022] SCONST #3
+  [0027] BIF see(1)
+  [0030] LOAD r2
+  [0032] DUP
+  [0033] ICONST 1
+  [0038] ADD
+  [0039] STORE r2
+  [0041] POP
+  [0042] JMP -40 (->0007)
+  [0047] NULL
+  [0048] RET
+  [0049] NULL
+  [0050] RET
