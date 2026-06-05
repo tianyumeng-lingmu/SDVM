@@ -270,6 +270,7 @@ class Compiler:
         self.func_defs = []              # list[FuncDef] (index 0 = main)
         self.func_map = {}               # name → index in func_defs
         self._saved_ctx = None           # 函数上下文切换时使用
+        self.foreach_counter = 0         # foreach 临时变量唯一 ID
 
     # ─── 上下文切换 ────────────────────────────
     def _push_func_context(self, func):
@@ -705,10 +706,98 @@ class Compiler:
         self.loop_labels.pop()
 
     def compile_foreach(self, stmt):
-        raise CompileError(
-            "foreach 暂不支持编译到 .dance — "
-            "需要 SDVM 添加迭代器 BIF 支持后才能实现，"
-            "请使用 for(init; cond; update) 循环替代")
+        """编译 foreach var in expr { body } 为 while 循环
+
+        等价于:
+            @_iter = expr
+            @_len = len(@_iter)
+            @_i = 0
+            while @_i < @_len {
+                var = @_iter[@_i]
+                body
+                @_i++
+            }
+        """
+        uid = self.foreach_counter
+        self.foreach_counter += 1
+
+        iter_var = f"_foreach_iter_{uid}"
+        len_var = f"_foreach_len_{uid}"
+        i_var = f"_foreach_i_{uid}"
+
+        # 分配临时变量槽
+        iter_slot = self.alloc_local(iter_var)
+        len_slot = self.alloc_local(len_var)
+        i_slot = self.alloc_local(i_var)
+
+        # @_iter = expr
+        self.compile_expression(stmt.iterable)
+        self.emit(OP_STORE)
+        self.emit_u8(iter_slot)
+
+        # @_len = len(@_iter)
+        self.emit(OP_LOAD)
+        self.emit_u8(iter_slot)
+        self.emit(OP_BIF)
+        self.emit_u8(BIF_LEN)
+        self.emit_u8(1)
+        self.emit(OP_STORE)
+        self.emit_u8(len_slot)
+
+        # @_i = 0
+        self.emit(OP_ICONST)
+        self.emit_i32(0)
+        self.emit(OP_STORE)
+        self.emit_u8(i_slot)
+
+        # 标签
+        check_label = f"_foreach_check_{uid}"
+        end_label = f"_foreach_end_{uid}"
+        self.loop_labels.append((check_label, end_label))
+
+        # ── check: @_i < @_len ──
+        self.define_label(check_label)
+        self.emit(OP_LOAD)
+        self.emit_u8(i_slot)
+        self.emit(OP_LOAD)
+        self.emit_u8(len_slot)
+        self.emit(OP_LT)
+        self.emit(OP_JIF)
+        jif_pos = self.get_pos()
+        self.emit_i32(0)
+        self.add_backpatch(jif_pos, end_label)
+
+        # ── body: var = @_iter[@_i] ──
+        self.emit(OP_LOAD)
+        self.emit_u8(iter_slot)
+        self.emit(OP_LOAD)
+        self.emit_u8(i_slot)
+        self.emit(OP_GETINDEX)
+        var_slot = self.alloc_local(stmt.var_name)
+        self.emit(OP_STORE)
+        self.emit_u8(var_slot)
+        self._compile_body(stmt.body)
+
+        # ── @_i++ ──
+        self.emit(OP_LOAD)
+        self.emit_u8(i_slot)
+        self.emit(OP_ICONST)
+        self.emit_i32(1)
+        self.emit(OP_ADD)
+        self.emit(OP_STORE)
+        self.emit_u8(i_slot)
+
+        # ── 跳回 check ──
+        self.emit(OP_JMP)
+        jmp_pos = self.get_pos()
+        self.emit_i32(0)
+        check_addr = self.labels[check_label]
+        offset = check_addr - (jmp_pos + 4)
+        self.code[jmp_pos:jmp_pos+4] = struct.pack('<i', offset)
+
+        # ── end ──
+        self.define_label(end_label)
+        self.loop_labels.pop()
 
     def compile_break(self, stmt):
         if not self.loop_labels:

@@ -2,7 +2,7 @@
 
 **Star Dance Virtual Machine** — 类 JVM 栈式虚拟机，执行 `.dance` 字节码。
 
-> 当前版本：v2.1 — 支持 FFI、包系统、namespace 调用、life 命途、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算
+> 当前版本：v2.2 — 支持 FFI、包系统、namespace 调用、life 命途、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算、foreach 遍历
 
 SDVM 由三部分组成：
 - **前端解析器**（Python）— `star_dance/` 词法/语法分析，生成 AST
@@ -131,6 +131,16 @@ while (i < 10) {
 
 for (i = 0; i < 10; i++) {
     see(i);
+}
+
+foreach x in [10, 20, 30, 40, 50] {
+    see(x);
+}
+
+foreach item in my_list {
+    if (item > 0) {
+        see(item);
+    }
 }
 
 break;      // 跳出循环
