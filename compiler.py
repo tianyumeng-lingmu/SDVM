@@ -403,18 +403,18 @@ class Compiler:
                 # 非 use 语句（如初始化代码）暂时不处理
                 # 后续可扩展为编译注入到主程序的 start 块中
 
-        # 将包内的 thing 声明加入当前编译的函数表
+        # 将包内的 thing 声明加入当前编译的函数表（带包名前缀，已存在则跳过）
         for decl in pkg_ast.func_decls:
-            if decl.name in self.func_map:
-                raise CompileError(
-                    f"导入包 '{package_name}' 时发生命名冲突: 函数 '{decl.name}' 已存在")
+            qualified_name = f"{package_name}.{decl.name}"
+            if qualified_name in self.func_map:
+                continue  # 已导入，跳过（避免循环依赖/重复导入）
             if not self._has_return_in_body(decl.body):
                 raise CompileError(
                     f"包 '{package_name}' 中的函数 '{decl.name}' 缺少 return() 语句")
             func_index = len(self.func_defs) + 1  # +1 for main(func 0)
-            func = FuncDef(decl.name, decl.params, decl.body)
+            func = FuncDef(qualified_name, decl.params, decl.body)
             self.func_defs.append(func)
-            self.func_map[decl.name] = func_index
+            self.func_map[qualified_name] = func_index
 
     # ─── 主编译入口 ─────────────────────────────
     def compile(self, ast: Program):
@@ -970,6 +970,20 @@ class Compiler:
             self.emit(OP_CALL)
             self.emit_u32(anon_idx)
             self.emit_u8(len(anon_func.params))
+        elif isinstance(expr.callee, GetAttr) and isinstance(expr.callee.obj, Identifier):
+            # 包限定调用: pkg.func() — 在 func_map 中查找 qualified_name
+            qualified_name = f"{expr.callee.obj.name}.{expr.callee.attr}"
+            if qualified_name in self.func_map:
+                func_idx = self.func_map[qualified_name]
+                func = self.func_defs[func_idx - 1]
+                ordered_exprs = self._resolve_call_args(func.param_names, expr.args)
+                for arg_expr in ordered_exprs:
+                    self.compile_expression(arg_expr)
+                self.emit(OP_CALL)
+                self.emit_u32(func_idx)
+                self.emit_u8(len(func.param_names))
+            else:
+                raise CompileError(f"未定义的包函数: '{qualified_name}'")
         else:
             # 复杂 callee 表达式 → 编译 callee 产生函数引用，然后 OP_CALLR
             self.compile_expression(expr.callee)

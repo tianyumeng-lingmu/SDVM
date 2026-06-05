@@ -5,9 +5,9 @@ start {
 
 // 包装一下 system 的函数，验证依赖传递
 thing GetInfo() {
-    int pid = GetCurrentProcessId();
-    int tid = GetCurrentThreadId();
-    int ticks = GetTickCount64();
+    int pid = system.GetCurrentProcessId();
+    int tid = system.GetCurrentThreadId();
+    int ticks = system.GetTickCount64();
     see("--- test_dep 包 ---\n");
     see("PID="); see(pid); see(" TID="); see(tid);
     see(" Ticks="); see(ticks); see("\n");
@@ -15,6 +15,6 @@ thing GetInfo() {
 }
 
 thing SysBeep(f, d) {
-    Beep(f, d);
+    system.Beep(f, d);
     return 0;
 }
