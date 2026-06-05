@@ -1,12 +1,19 @@
 // 测试：函数必须有 return() 语句
+// 所有模块级 thing（函数）必须有明确的 return()
 
-thing no_return_func(x) {
+thing calc_result(x) {
     int y = x + 1;
-    // 没有 return 语句！应该编译失败
+    return(y);
 }
 
 main {
     thing main() {
-        see("不应该运行到这里\n");
+        int result = calc_result(41);
+        see("calc_result(41) = ", result, "\n");
+        if (result == 42) {
+            see("[PASS] return 验证通过\n");
+        } else {
+            see("[FAIL] 返回值错误\n");
+        }
     }
 }

@@ -3,6 +3,6 @@ start{
 }
 main {
     thing main() {
-        see(PI)
+        see("PI = ", PI, "\n");
     }
 }

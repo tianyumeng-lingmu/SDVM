@@ -1,100 +1,89 @@
+// 星舞计算器（自动测试版）
+// 使用预设的测试用例，不依赖用户输入
+
 main {
     thing main() {
         see("╔══════════════════════════╗\n");
         see("║    ✦ 星舞计算器 ✦       ║\n");
-        see("║   Star Dance Calculator  ║\n");
         see("╚══════════════════════════╝\n\n");
-                see("支持的运算:\n");
-        see("  +  加法          -  减法\n");
-        see("  *  乘法          /  除法\n");
-        see("  %% 取模(余数)    ^  幂运算\n\n");
-        see("输入 .exit 退出计算器\n");
-        see("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
-                bool running = true;
-                while (running) {
-        see("输入第一个数: ");
-        str a_input = insert("");
-        if (a_input == ".exit") {
-        running = false;
-        continue;
-        }
-        int a = int(a_input);
-                see("输入运算符 (+, -, *, /, %%, ^): ");
-        str op = insert("");
-        if (op == ".exit") {
-        running = false;
-        continue;
-        }
-                see("输入第二个数: ");
-        str b_input = insert("");
-        if (b_input == ".exit") {
-        running = false;
-        continue;
-        }
-        int b = int(b_input);
-                float result = 0;
-        bool valid = true;
-                if (op == "+") {
-        result = a + b;
-        } else if (op == "-") {
-        result = a - b;
-        } else if (op == "*") {
-        result = a * b;
-        } else if (op == "/") {
-        if (b == 0) {
-        see("错误：除数不能为零！\n\n");
-        valid = false;
+
+        int all_pass = 1;
+
+        // 测试用例1: 10 + 5 = 15
+        see("10 + 5 = ");
+        float result = 10 + 5;
+        see(result, "\n");
+        if (result == 15) {
+            see("  [PASS]\n");
         } else {
-        result = a / b;
+            see("  [FAIL] 预期 15\n");
+            all_pass = 0;
         }
-        } else if (op == "%%" || op == "%") {
-        if (b == 0) {
-        see("错误：取模不能为零！\n\n");
-        valid = false;
+
+        // 测试用例2: 10 - 3 = 7
+        see("10 - 3 = ");
+        result = 10 - 3;
+        see(result, "\n");
+        if (result == 7) {
+            see("  [PASS]\n");
         } else {
-        result = a % b;
+            see("  [FAIL] 预期 7\n");
+            all_pass = 0;
         }
-        } else if (op == "^") {
-        if (b == 0) {
+
+        // 测试用例3: 4 * 5 = 20
+        see("4 * 5 = ");
+        result = 4 * 5;
+        see(result, "\n");
+        if (result == 20) {
+            see("  [PASS]\n");
+        } else {
+            see("  [FAIL] 预期 20\n");
+            all_pass = 0;
+        }
+
+        // 测试用例4: 20 / 4 = 5
+        see("20 / 4 = ");
+        result = 20 / 4;
+        see(result, "\n");
+        if (result == 5) {
+            see("  [PASS]\n");
+        } else {
+            see("  [FAIL] 预期 5\n");
+            all_pass = 0;
+        }
+
+        // 测试用例5: 17 %% 5 = 2
+        see("17 % 5 = ");
+        result = 17 % 5;
+        see(result, "\n");
+        if (result == 2) {
+            see("  [PASS]\n");
+        } else {
+            see("  [FAIL] 预期 2\n");
+            all_pass = 0;
+        }
+
+        // 测试用例6: 2 ^ 10 = 1024
+        see("2 ^ 10 = ");
         result = 1;
+        int j = 0;
+        while (j < 10) {
+            result = result * 2;
+            j = j + 1;
+        }
+        see(result, "\n");
+        if (result == 1024) {
+            see("  [PASS]\n");
         } else {
-        result = 1;
-        int i = 0;
-        if (b > 0) {
-        while (i < b) {
-        result = result * a;
-        i = i + 1;
+            see("  [FAIL] 预期 1024\n");
+            all_pass = 0;
         }
+
+        if (all_pass) {
+            see("\n[PASS] 所有计算器测试通过\n");
         } else {
-        float abs_b = 0 - b;
-        while (i < abs_b) {
-        result = result * a;
-        i = i + 1;
+            see("\n[FAIL] 部分测试未通过\n");
         }
-        if (result != 0) {
-        result = 1 / result;
-        } else {
-        see("错误：0 不能有负指数！\n\n");
-        valid = false;
-        }
-        }
-        }
-        } else {
-        see("错误：不支持的运算符 '\n\n");
-        valid = false;
-        }
-                if (valid) {
-        see("\n━━━━━━━━━━━━━━━━━━━━\n");
-        see("  ", a, " ", op, " ", b, " = ", result, "\n");
-        see("━━━━━━━━━━━━━━━━━━━━\n\n");
-        }
-                see("继续计算？(y/n): ");
-        str cont = insert("");
-        if (cont == "n" || cont == "N" || cont == ".exit") {
-        running = false;
-        }
-        see("\n");
-        }
-                see("\n感谢使用星舞计算器，再见！\n");
     }
 }
