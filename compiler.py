@@ -143,6 +143,9 @@ BIF_STR_TRIM     = 25  # str_trim(s) → str
 BIF_STR_UPPER    = 26  # str_upper(s) → str
 BIF_STR_LOWER    = 27  # str_lower(s) → str
 BIF_STR_SPLIT    = 28  # str_split(s, delimiter) → object
+BIF_FFI_LOAD     = 29  # ffi_load(path) → int
+BIF_FFI_FREE     = 30  # ffi_free(handle) → void
+BIF_FFI_CALL     = 31  # ffi_call(handle, name, ret_type, ...) → value
 
 BIF_MAP = {
     'see': BIF_SEE,
@@ -172,6 +175,9 @@ BIF_MAP = {
     'str_upper':   BIF_STR_UPPER,
     'str_lower':   BIF_STR_LOWER,
     'str_split':   BIF_STR_SPLIT,
+    'ffi_load':    BIF_FFI_LOAD,
+    'ffi_free':    BIF_FFI_FREE,
+    'ffi_call':    BIF_FFI_CALL,
 }
 
 

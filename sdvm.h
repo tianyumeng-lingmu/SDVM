@@ -154,7 +154,10 @@ typedef enum {
     BIF_STR_UPPER   = 26, /* str_upper(s): 转大写 */
     BIF_STR_LOWER   = 27, /* str_lower(s): 转小写 */
     BIF_STR_SPLIT   = 28, /* str_split(s, delimiter): 分割字符串成列表 */
-    BIF_COUNT   = 29,
+    BIF_FFI_LOAD    = 29, /* ffi_load(path): 加载动态链接库，返回句柄 */
+    BIF_FFI_FREE    = 30, /* ffi_free(handle): 释放动态链接库 */
+    BIF_FFI_CALL    = 31, /* ffi_call(handle, name, ret_type, ...): 调用 C 函数 */
+    BIF_COUNT   = 32,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════

@@ -37,6 +37,25 @@ static char* tcc_strdup(const char* s) {
 
 /* ─── Winsock 初始化 (单例) ───────────────── */
 static int _winsock_inited = 0;
+
+/* ─── FFI 动态库加载 ────────────────────── */
+/* Windows DLL loading declarations (TCC compatible) */
+typedef void* HMODULE;
+HMODULE LoadLibraryA(const char*);
+void* GetProcAddress(HMODULE, const char*);
+int FreeLibrary(HMODULE);
+
+/* FFI 调用函数指针类型 (最多 8 个 int64 参数) */
+typedef int64_t (*ffi_fn_0)();
+typedef int64_t (*ffi_fn_1)(int64_t);
+typedef int64_t (*ffi_fn_2)(int64_t, int64_t);
+typedef int64_t (*ffi_fn_3)(int64_t, int64_t, int64_t);
+typedef int64_t (*ffi_fn_4)(int64_t, int64_t, int64_t, int64_t);
+typedef int64_t (*ffi_fn_5)(int64_t, int64_t, int64_t, int64_t, int64_t);
+typedef int64_t (*ffi_fn_6)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
+typedef int64_t (*ffi_fn_7)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
+typedef int64_t (*ffi_fn_8)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
+
 static int ensure_winsock(void) {
     if (_winsock_inited) return 0;
     WSADATA wsa;
@@ -1289,6 +1308,115 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         }
         Value r; r.type = VAL_OBJECT; r.data.ptr_val = obj;
         PUSH(r);
+        break;
+    }
+
+    case BIF_FFI_LOAD: {
+        /* ffi_load(path): 加载 DLL，返回句柄 */
+        if (argc != 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_load 需要 1 个参数 (path)");
+            vm->has_error = 1; return -1;
+        }
+        Value path_v = vm->stack[vm->sp--];
+        if (path_v.type != VAL_STRING) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_load: 参数必须是字符串路径");
+            vm->has_error = 1; return -1;
+        }
+        const char* path = path_v.data.str_val ? path_v.data.str_val : "";
+        HMODULE hMod = LoadLibraryA(path);
+        if (!hMod) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_load: 无法加载库 '%s'", path);
+            vm->has_error = 1; return -1;
+        }
+        Value r; r.type = VAL_INT; r.data.int_val = (int64_t)(intptr_t)hMod;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_FFI_FREE: {
+        /* ffi_free(handle): 释放 DLL */
+        if (argc != 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_free 需要 1 个参数 (handle)");
+            vm->has_error = 1; return -1;
+        }
+        Value h_v = vm->stack[vm->sp--];
+        HMODULE hMod = (HMODULE)(intptr_t)h_v.data.int_val;
+        if (hMod) FreeLibrary(hMod);
+        Value r; r.type = VAL_NULL; PUSH(r);
+        break;
+    }
+
+    case BIF_FFI_CALL: {
+        /* ffi_call(handle, name, ret_type, arg1, arg2, ...)
+           调用 C 函数，返回值为 int64 */
+        if (argc < 3) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_call 至少需要 3 个参数 (handle, name, ret_type)");
+            vm->has_error = 1; return -1;
+        }
+        int nargs = argc - 3;  /* 函数实际参数个数 */
+
+        /* 从栈弹出函数参数 (逆序弹出) */
+        int64_t args[16];
+        if (nargs > 16) {
+            vm->has_error = 1; return -1;
+        }
+        for (int i = nargs - 1; i >= 0; i--) {
+            Value v = vm->stack[vm->sp--];
+            args[i] = val_to_int64(&v);
+        }
+
+        /* 弹出固定参数: ret_type, name, handle */
+        Value ret_type_v = vm->stack[vm->sp--];
+        Value name_v = vm->stack[vm->sp--];
+        Value handle_v = vm->stack[vm->sp--];
+
+        const char* ret_type = ret_type_v.type == VAL_STRING && ret_type_v.data.str_val
+                               ? ret_type_v.data.str_val : "i";
+        const char* func_name = name_v.type == VAL_STRING && name_v.data.str_val
+                                ? name_v.data.str_val : "";
+        void* func_ptr = NULL;
+
+        if (handle_v.type == VAL_INT) {
+            HMODULE hMod = (HMODULE)(intptr_t)handle_v.data.int_val;
+            if (hMod) {
+                func_ptr = (void*)GetProcAddress(hMod, func_name);
+            }
+        }
+        if (!func_ptr) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg),
+                     "ffi_call: 找不到函数 '%s'", func_name);
+            vm->has_error = 1; return -1;
+        }
+
+        /* 根据参数个数调用 */
+        int64_t result = 0;
+        switch (nargs) {
+            case 0:  result = ((ffi_fn_0)func_ptr)(); break;
+            case 1:  result = ((ffi_fn_1)func_ptr)(args[0]); break;
+            case 2:  result = ((ffi_fn_2)func_ptr)(args[0], args[1]); break;
+            case 3:  result = ((ffi_fn_3)func_ptr)(args[0], args[1], args[2]); break;
+            case 4:  result = ((ffi_fn_4)func_ptr)(args[0], args[1], args[2], args[3]); break;
+            case 5:  result = ((ffi_fn_5)func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
+            case 6:  result = ((ffi_fn_6)func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+            case 7:  result = ((ffi_fn_7)func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
+            case 8:  result = ((ffi_fn_8)func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+            default:
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "ffi_call: 不支持的参数个数 %d (最多 8 个)", nargs);
+                vm->has_error = 1; return -1;
+        }
+
+        /* 根据返回类型处理 */
+        if (ret_type[0] == 'v') {
+            Value r; r.type = VAL_NULL; PUSH(r);
+        } else if (ret_type[0] == 'f') {
+            double d;
+            memcpy(&d, &result, sizeof(d));
+            Value r; r.type = VAL_FLOAT; r.data.float_val = d; PUSH(r);
+        } else {
+            /* 默认返回 int */
+            Value r; r.type = VAL_INT; r.data.int_val = result; PUSH(r);
+        }
         break;
     }
 
