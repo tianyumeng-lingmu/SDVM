@@ -146,6 +146,14 @@ BIF_STR_SPLIT    = 28  # str_split(s, delimiter) → object
 BIF_FFI_LOAD     = 29  # ffi_load(path) → int
 BIF_FFI_FREE     = 30  # ffi_free(handle) → void
 BIF_FFI_CALL     = 31  # ffi_call(handle, name, ret_type, ...) → value
+BIF_RANGE        = 32  # range(start, end) → object
+BIF_LIST_ADD     = 33  # list.add(val) / add(idx, val)
+BIF_LIST_POP     = 34  # list.pop() / pop(idx)
+BIF_LIST_REMOVE  = 35  # list.remove(idx)
+BIF_LIST_SORT    = 36  # list.sort()
+BIF_LIST_REVERSE = 37  # list.reverse()
+BIF_LIST_CLEAR   = 38  # list.clear()
+BIF_LIST_COPY    = 39  # list.copy()
 
 BIF_MAP = {
     'see': BIF_SEE,
@@ -178,6 +186,18 @@ BIF_MAP = {
     'ffi_load':    BIF_FFI_LOAD,
     'ffi_free':    BIF_FFI_FREE,
     'ffi_call':    BIF_FFI_CALL,
+    'range':       BIF_RANGE,
+}
+
+
+LIST_BIF_MAP = {
+    'add':    BIF_LIST_ADD,
+    'pop':    BIF_LIST_POP,
+    'remove': BIF_LIST_REMOVE,
+    'sort':   BIF_LIST_SORT,
+    'reverse': BIF_LIST_REVERSE,
+    'clear':  BIF_LIST_CLEAR,
+    'copy':   BIF_LIST_COPY,
 }
 
 
@@ -971,7 +991,7 @@ class Compiler:
             self.emit_u32(anon_idx)
             self.emit_u8(len(anon_func.params))
         elif isinstance(expr.callee, GetAttr) and isinstance(expr.callee.obj, Identifier):
-            # 包限定调用: pkg.func() — 在 func_map 中查找 qualified_name
+            # 包限定调用或列表方法: pkg.func() 或 list.add()
             qualified_name = f"{expr.callee.obj.name}.{expr.callee.attr}"
             if qualified_name in self.func_map:
                 func_idx = self.func_map[qualified_name]
@@ -982,8 +1002,17 @@ class Compiler:
                 self.emit(OP_CALL)
                 self.emit_u32(func_idx)
                 self.emit_u8(len(func.param_names))
+            elif expr.callee.attr in LIST_BIF_MAP:
+                # 列表方法调用: list.add(1), list.pop() 等
+                bif = LIST_BIF_MAP[expr.callee.attr]
+                self.compile_expression(expr.callee.obj)  # 编译列表对象（作为 arg0）
+                for arg in expr.args:
+                    self.compile_expression(arg)
+                self.emit(OP_BIF)
+                self.emit_u8(bif)
+                self.emit_u8(1 + len(expr.args))  # arg_count = 对象 + 参数
             else:
-                raise CompileError(f"未定义的包函数: '{qualified_name}'")
+                raise CompileError(f"未定义的包函数或列表方法: '{qualified_name}'")
         else:
             # 复杂 callee 表达式 → 编译 callee 产生函数引用，然后 OP_CALLR
             self.compile_expression(expr.callee)
@@ -1005,19 +1034,21 @@ class Compiler:
         self.emit_u32(func_idx)
 
     def compile_list_literal(self, expr):
-        """编译特殊列表（字典/对象）['a':1, 'b':[1,2,3]]"""
-        # entries 是 (key_or_None, value_node) 列表
-        # 只编译有键的条目（字典/对象模式）
-        pairs = [(k, v) for k, v in expr.entries if k is not None]
-        for key_str, val_ast in pairs:
+        """编译列表/字典字面量 [1,2,3] 或 ['a':1, 'b':2]"""
+        entries = expr.entries
+        n = len(entries)
+        
+        for i, (key_str, val_ast) in enumerate(entries):
             self.compile_expression(val_ast)   # 值先入栈
-            # key 已经是字符串（解析器预处理好的），直接放入常量池
-            idx = self.add_string(key_str)
+            if key_str is not None:
+                # 字典风格: key 已经是字符串，直接放入常量池
+                idx = self.add_string(key_str)
+            else:
+                # 列表风格: 自动分配整数键 "0", "1", "2", ...
+                idx = self.add_string(str(i))
             self.emit(OP_SCONST)
             self.emit_u32(idx)
 
-        # 发射 OP_NEWOBJ n
-        n = len(pairs)
         self.emit(OP_NEWOBJ)
         self.emit(n)
 

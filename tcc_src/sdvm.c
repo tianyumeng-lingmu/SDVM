@@ -137,6 +137,23 @@ static Value obj_get(const Object* obj, const char* key) {
     return null_val;
 }
 
+static void obj_remove(Object* obj, const char* key) {
+    int idx = obj_find(obj, key);
+    if (idx < 0) return;
+    free(obj->entries[idx].key);
+    for (int i = idx; i < obj->count - 1; i++)
+        obj->entries[i] = obj->entries[i + 1];
+    obj->count--;
+}
+
+static Object* obj_copy(SDVM* vm, const Object* src) {
+    Object* obj = obj_create(vm);
+    if (!obj) return NULL;
+    for (int i = 0; i < src->count; i++)
+        obj_set(obj, src->entries[i].key, src->entries[i].value);
+    return obj;
+}
+
 /* ─── 字节序工具 (小端) ──────────────────────── */
 static uint32_t read_u32(const uint8_t* p) {
     return (uint32_t)p[0]
@@ -779,6 +796,7 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         r.type = VAL_INT;
         switch (v.type) {
         case VAL_STRING: r.data.int_val = v.data.str_val ? (int64_t)strlen(v.data.str_val) : 0; break;
+        case VAL_OBJECT: r.data.int_val = (int64_t)((Object*)v.data.ptr_val)->count; break;
         default:         r.data.int_val = 0; break;
         }
         PUSH(r);
@@ -1417,6 +1435,232 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
             /* 默认返回 int */
             Value r; r.type = VAL_INT; r.data.int_val = result; PUSH(r);
         }
+        break;
+    }
+
+    /* ─── 列表 / 范围 BIF ──────────────────────────── */
+    case BIF_RANGE: {
+        int64_t start = 0, end = 0;
+        if (argc == 1) {
+            if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_RANGE: 栈空"); vm->has_error = 1; return -1; }
+            Value end_v = vm->stack[vm->sp--];
+            end = end_v.data.int_val;
+        } else {
+            if (vm->sp < 1) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_RANGE: 栈空"); vm->has_error = 1; return -1; }
+            Value end_v = vm->stack[vm->sp--];
+            Value start_v = vm->stack[vm->sp--];
+            start = start_v.data.int_val;
+            end = end_v.data.int_val;
+        }
+        Object* obj = obj_create(vm);
+        if (!obj) { vm->has_error = 1; return -1; }
+        for (int64_t i = start; i < end; i++) {
+            char key[32];
+            snprintf(key, sizeof(key), "%lld", (long long)(i - start));
+            Value val; val.type = VAL_INT; val.data.int_val = i;
+            obj_set(obj, key, val);
+        }
+        Value r; r.type = VAL_OBJECT; r.data.ptr_val = obj;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_ADD: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_ADD: 栈空"); vm->has_error = 1; return -1; }
+        Value val = vm->stack[vm->sp--];
+        int64_t insert_idx = -1;
+        if (argc == 3) {
+            if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_ADD: 栈空"); vm->has_error = 1; return -1; }
+            Value idx_v = vm->stack[vm->sp--];
+            insert_idx = idx_v.data.int_val;
+        }
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_ADD: 栈空"); vm->has_error = 1; return -1; }
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+
+        if (insert_idx >= 0) {
+            /* Insert at index: shift keys >= insert_idx up by 1 */
+            int64_t max_key = -1;
+            for (int i = 0; i < obj->count; i++) {
+                int64_t k = strtol(obj->entries[i].key, NULL, 10);
+                if (k > max_key) max_key = k;
+            }
+            for (int64_t k = max_key; k >= insert_idx; k--) {
+                char old_key[32], new_key[32];
+                snprintf(old_key, sizeof(old_key), "%lld", (long long)k);
+                snprintf(new_key, sizeof(new_key), "%lld", (long long)(k + 1));
+                int idx = obj_find(obj, old_key);
+                if (idx >= 0) {
+                    Value ov = obj->entries[idx].value;
+                    obj_set(obj, new_key, ov);
+                    obj_remove(obj, old_key);
+                }
+            }
+            char key[32];
+            snprintf(key, sizeof(key), "%lld", (long long)insert_idx);
+            obj_set(obj, key, val);
+        } else {
+            /* Push: find max key + 1 */
+            int64_t max_key = -1;
+            for (int i = 0; i < obj->count; i++) {
+                int64_t k = strtol(obj->entries[i].key, NULL, 10);
+                if (k > max_key) max_key = k;
+            }
+            char key[32];
+            snprintf(key, sizeof(key), "%lld", (long long)(max_key + 1));
+            obj_set(obj, key, val);
+        }
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_POP: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_POP: 栈空"); vm->has_error = 1; return -1; }
+        int64_t pop_idx = -1;
+        if (argc == 2) {
+            Value idx_v = vm->stack[vm->sp--];
+            pop_idx = idx_v.data.int_val;
+        }
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+        Value result;
+        result.type = VAL_NULL;
+
+        if (pop_idx >= 0) {
+            char key[32];
+            snprintf(key, sizeof(key), "%lld", (long long)pop_idx);
+            int idx = obj_find(obj, key);
+            if (idx >= 0) {
+                result = obj->entries[idx].value;
+                obj_remove(obj, key);
+                /* 重新编号 */
+                char old_key[32], new_key[32];
+                for (int64_t k = pop_idx + 1; ; k++) {
+                    snprintf(old_key, sizeof(old_key), "%lld", (long long)k);
+                    int fi = obj_find(obj, old_key);
+                    if (fi < 0) break;
+                    Value v = obj->entries[fi].value;
+                    snprintf(new_key, sizeof(new_key), "%lld", (long long)(k - 1));
+                    obj_set(obj, new_key, v);
+                    obj_remove(obj, old_key);
+                }
+            }
+        } else {
+            /* Find max key */
+            int64_t max_key = -1;
+            for (int i = 0; i < obj->count; i++) {
+                int64_t k = strtol(obj->entries[i].key, NULL, 10);
+                if (k > max_key) max_key = k;
+            }
+            if (max_key >= 0) {
+                char key[32];
+                snprintf(key, sizeof(key), "%lld", (long long)max_key);
+                int idx = obj_find(obj, key);
+                if (idx >= 0) {
+                    result = obj->entries[idx].value;
+                    obj_remove(obj, key);
+                }
+            }
+        }
+        PUSH(result);
+        break;
+    }
+
+    case BIF_LIST_REMOVE: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_REMOVE: 栈空"); vm->has_error = 1; return -1; }
+        Value idx_v = vm->stack[vm->sp--];
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+        int64_t rem_idx = idx_v.data.int_val;
+        char key[32];
+        snprintf(key, sizeof(key), "%lld", (long long)rem_idx);
+        obj_remove(obj, key);
+        /* 重新编号：移除后 key > rem_idx 的条目 key 减 1 */
+        char old_key[32], new_key[32];
+        for (int64_t k = rem_idx + 1; ; k++) {
+            snprintf(old_key, sizeof(old_key), "%lld", (long long)k);
+            int idx = obj_find(obj, old_key);
+            if (idx < 0) break;
+            Value v = obj->entries[idx].value;
+            snprintf(new_key, sizeof(new_key), "%lld", (long long)(k - 1));
+            obj_set(obj, new_key, v);
+            obj_remove(obj, old_key);
+        }
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_SORT: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_SORT: 栈空"); vm->has_error = 1; return -1; }
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+        /* Bubble sort by value (int) */
+        for (int i = 0; i < obj->count - 1; i++) {
+            for (int j = 0; j < obj->count - i - 1; j++) {
+                int64_t a = obj->entries[j].value.data.int_val;
+                int64_t b = obj->entries[j + 1].value.data.int_val;
+                if (a > b) {
+                    ObjectEntry tmp = obj->entries[j];
+                    obj->entries[j] = obj->entries[j + 1];
+                    obj->entries[j + 1] = tmp;
+                }
+            }
+        }
+        /* 重编号 keys 为 0,1,2,... */
+        for (int i = 0; i < obj->count; i++) {
+            free(obj->entries[i].key);
+            char key[32];
+            snprintf(key, sizeof(key), "%d", i);
+            obj->entries[i].key = strdup(key);
+        }
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_REVERSE: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_REVERSE: 栈空"); vm->has_error = 1; return -1; }
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+        for (int i = 0, j = obj->count - 1; i < j; i++, j--) {
+            ObjectEntry tmp = obj->entries[i];
+            obj->entries[i] = obj->entries[j];
+            obj->entries[j] = tmp;
+        }
+        /* 重编号 keys 为 0,1,2,... */
+        for (int i = 0; i < obj->count; i++) {
+            free(obj->entries[i].key);
+            char key[32];
+            snprintf(key, sizeof(key), "%d", i);
+            obj->entries[i].key = strdup(key);
+        }
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_CLEAR: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_CLEAR: 栈空"); vm->has_error = 1; return -1; }
+        Value list_v = vm->stack[vm->sp--];
+        Object* obj = (Object*)list_v.data.ptr_val;
+        for (int i = 0; i < obj->count; i++)
+            free(obj->entries[i].key);
+        obj->count = 0;
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
+    case BIF_LIST_COPY: {
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_LIST_COPY: 栈空"); vm->has_error = 1; return -1; }
+        Value list_v = vm->stack[vm->sp--];
+        Object* src = (Object*)list_v.data.ptr_val;
+        Object* copy = obj_copy(vm, src);
+        if (!copy) { vm->has_error = 1; return -1; }
+        Value r; r.type = VAL_OBJECT; r.data.ptr_val = copy;
+        PUSH(r);
         break;
     }
 

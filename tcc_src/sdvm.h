@@ -157,7 +157,15 @@ typedef enum {
     BIF_FFI_LOAD    = 29, /* ffi_load(path): 加载动态链接库，返回句柄 */
     BIF_FFI_FREE    = 30, /* ffi_free(handle): 释放动态链接库 */
     BIF_FFI_CALL    = 31, /* ffi_call(handle, name, ret_type, ...): 调用 C 函数 */
-    BIF_COUNT   = 32,
+    BIF_RANGE       = 32, /* range(start, end): 生成整数序列 */
+    BIF_LIST_ADD    = 33, /* list.add(val) 或 list.add(idx, val) */
+    BIF_LIST_POP    = 34, /* list.pop() 或 list.pop(idx) */
+    BIF_LIST_REMOVE = 35, /* list.remove(idx) */
+    BIF_LIST_SORT   = 36, /* list.sort() */
+    BIF_LIST_REVERSE= 37, /* list.reverse() */
+    BIF_LIST_CLEAR  = 38, /* list.clear() */
+    BIF_LIST_COPY   = 39, /* list.copy() */
+    BIF_COUNT   = 40,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
