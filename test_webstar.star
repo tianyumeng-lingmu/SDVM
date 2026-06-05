@@ -1,6 +1,6 @@
 // test_webstar.star - webstar 包测试用例
-// 注意：此测试只验证 web_response 等纯函数，不启动 HTTP 服务器
-// 要测试完整 HTTP 服务器功能，请手动运行原始版本
+// 启动 HTTP 服务器，接受一个连接，返回 "Hello World"
+// 在浏览器访问 http://localhost:8080/
 
 start {
     use webstar;
@@ -8,21 +8,27 @@ start {
 
 main {
     thing main() {
-        see("webstar 包测试开始\n");
-
-        // 测试 web_response 纯函数
-        str resp = web_response(200, "text/html", "<h1>Hello</h1>");
-        see("Response status line: ", resp, "\n");
-
-        // 验证响应包含预期内容（通过 len 判断）
-        int length = len(resp);
-        see("Response length: ", length, "\n");
-        if (length > 50) {
-            see("[PASS] web_response 格式化正确\n");
-        } else {
-            see("[FAIL] web_response 格式错误，长度过短\n");
+        int port = 18080;
+        see("webstar: 启动服务器在端口 ", port, "\n");
+                int server = web_start(port);
+        see("webstar: 服务器句柄 = ", server, "\n");
+                int conn = web_accept(server);
+        see("webstar: 收到连接，句柄 = ", conn, "\n");
+                str line = web_read_line(conn);
+        see("webstar: 收到请求行: ", line, "\n");
+                // 读取剩余的请求头（直到空行）
+        while (1) {
+        str hdr = web_read_line(conn);
+        if (hdr == "") {
+        break;
         }
-
-        see("webstar 包测试完成\n");
+        }
+                str html = "<html><body><h1>Hello from webstar!</h1><p>StarDance HTTP Server</p></body></html>";
+        str resp = web_response(200, "text/html", html);
+        web_send(conn, resp);
+        see("webstar: 响应已发送\n");
+                web_close(conn);
+        web_close(server);
+        see("webstar: 连接已关闭\n");
     }
 }
