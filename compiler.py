@@ -155,6 +155,10 @@ BIF_LIST_REVERSE = 37  # list.reverse()
 BIF_LIST_CLEAR   = 38  # list.clear()
 BIF_LIST_COPY    = 39  # list.copy()
 
+BIF_COPY_COPY    = 40  # copy.copy(a): 存入临时区
+BIF_COPY_PASTE   = 41  # copy.paste(): 粘贴返回
+BIF_COPY_CLEAN   = 42  # copy.clean(): 清除临时区
+
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -198,6 +202,12 @@ LIST_BIF_MAP = {
     'reverse': BIF_LIST_REVERSE,
     'clear':  BIF_LIST_CLEAR,
     'copy':   BIF_LIST_COPY,
+}
+
+COPY_BIF_MAP = {
+    'copy':  BIF_COPY_COPY,
+    'paste': BIF_COPY_PASTE,
+    'clean': BIF_COPY_CLEAN,
 }
 
 
@@ -1002,6 +1012,14 @@ class Compiler:
                 self.emit(OP_CALL)
                 self.emit_u32(func_idx)
                 self.emit_u8(len(func.param_names))
+            elif expr.callee.obj.name == "copy" and expr.callee.attr in COPY_BIF_MAP:
+                # copy包方法: copy.copy(a), copy.paste(), copy.clean()
+                bif = COPY_BIF_MAP[expr.callee.attr]
+                for arg in expr.args:
+                    self.compile_expression(arg)
+                self.emit(OP_BIF)
+                self.emit_u8(bif)
+                self.emit_u8(len(expr.args))
             elif expr.callee.attr in LIST_BIF_MAP:
                 # 列表方法调用: list.add(1), list.pop() 等
                 bif = LIST_BIF_MAP[expr.callee.attr]

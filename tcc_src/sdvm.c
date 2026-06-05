@@ -30,6 +30,9 @@ static char* tcc_strdup(const char* s) {
 #define _strdup tcc_strdup
 #endif
 
+/* copy包的临时存储区 */
+static Value s_copy_temp = { .type = VAL_NULL };
+
 /* ─── Winsock 网络支持 ────────────────────── */
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -1661,6 +1664,30 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         if (!copy) { vm->has_error = 1; return -1; }
         Value r; r.type = VAL_OBJECT; r.data.ptr_val = copy;
         PUSH(r);
+        break;
+    }
+
+    case BIF_COPY_COPY: {
+        /* copy.copy(a): 把对象 a 存入临时区，不返回值 */
+        if (vm->sp < 0) { snprintf(vm->error_msg, sizeof(vm->error_msg), "BIF_COPY_COPY: 栈空"); vm->has_error = 1; return -1; }
+        s_copy_temp = vm->stack[vm->sp--];
+        Value cr; cr.type = VAL_NULL;
+        PUSH(cr);
+        break;
+    }
+
+    case BIF_COPY_PASTE: {
+        /* copy.paste(): 粘贴返回临时区对象 */
+        PUSH(s_copy_temp);
+        break;
+    }
+
+    case BIF_COPY_CLEAN: {
+        /* copy.clean(): 清除临时区 */
+        s_copy_temp.type = VAL_NULL;
+        s_copy_temp.data.int_val = 0;
+        Value cr; cr.type = VAL_NULL;
+        PUSH(cr);
         break;
     }
 

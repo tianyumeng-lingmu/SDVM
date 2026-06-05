@@ -165,7 +165,10 @@ typedef enum {
     BIF_LIST_REVERSE= 37, /* list.reverse() */
     BIF_LIST_CLEAR  = 38, /* list.clear() */
     BIF_LIST_COPY   = 39, /* list.copy() */
-    BIF_COUNT   = 40,
+    BIF_COPY_COPY   = 40, /* copy.copy(a): 存入临时区 */
+    BIF_COPY_PASTE  = 41, /* copy.paste(): 粘贴返回临时区对象 */
+    BIF_COPY_CLEAN  = 42, /* copy.clean(): 清除临时区 */
+    BIF_COUNT   = 43,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
