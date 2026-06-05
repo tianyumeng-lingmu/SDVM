@@ -1,8 +1,7 @@
 // _test_bin_str_v8.star
 // 二进制连接字符串问题：0|1|10|11|100|101|...
 // 求前 x 位中 1 的个数
-//
-// 使用 << 代替乘2循环，使用 /^ 和 % 代替手写整除/取模
+// 使用 << 代替乘2，/^ 做整除，for 做循环
 
 main {
     thing main() {
@@ -35,21 +34,20 @@ main {
 }
 
 // ─── 求 0..n 所有整数的二进制中 1 的总数 ──
+// 对每个二进制位 i，统计该位为 1 的数字个数
 thing popcount_sum(n) {
     if (n <= 0) return 0;
     count = 0;
-    i = 0;
-    while (1) {
+    for (i = 0; ; i = i + 1) {
         pi = 1 << i;
         if (pi > n) break;
-        block = pi << 1;
+        block = pi << 1;               // 2^(i+1)
         full = (n + 1) /^ block;
         rem = (n + 1) % block;
         count = count + full * pi;
         if (rem > pi) {
             count = count + (rem - pi);
         }
-        i = i + 1;
     }
     return count;
 }
@@ -61,14 +59,12 @@ thing popcount_prefix(num, bits) {
     total = 0;
     tn = 1;
     while (tn <= num) { total = total + 1; tn = tn << 1; }
-    i = 0;
-    while (i < bits) {
+    for (i = 0; i < bits; i = i + 1) {
         bv = 1 << (total - 1 - i);
         if (n >= bv) {
             count = count + 1;
             n = n - bv;
         }
-        i = i + 1;
     }
     return count;
 }

@@ -26,8 +26,7 @@ main {
 thing popcount_sum(n) {
     if (n <= 0) return 0;
     count = 0;
-    i = 0;
-    while (1) {
+    for (i = 0; ; i = i + 1) {
         pi = 1 << i;
         if (pi > n) break;
         block = pi << 1;        // 2^(i+1)
@@ -37,7 +36,6 @@ thing popcount_sum(n) {
         if (rem > pi) {
             count = count + (rem - pi);
         }
-        i = i + 1;
     }
     return count;
 }
@@ -46,19 +44,17 @@ thing popcount_sum(n) {
 thing popcount_prefix(num, bits) {
     count = 0;
     n = num;
-    // 求 bit_len（2^k ≤ num 的最大 k+1）
+    // 求 bit_len
     total = 0;
     tn = 1;
     while (tn <= num) { total = total + 1; tn = tn << 1; }
     // 逐位检查，从最高位开始
-    i = 0;
-    while (i < bits) {
+    for (i = 0; i < bits; i = i + 1) {
         bv = 1 << (total - 1 - i);
         if (n >= bv) {
             count = count + 1;
             n = n - bv;
         }
-        i = i + 1;
     }
     return count;
 }
