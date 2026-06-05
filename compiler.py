@@ -73,6 +73,9 @@ OP_DIV     = 0x23
 OP_MOD     = 0x24
 OP_NEG     = 0x25
 OP_IDIV    = 0x26  # 整数除法
+OP_SHL     = 0x27  # 左移
+OP_SHR     = 0x28  # 右移
+OP_USHR    = 0x29  # 无符号右移
 
 # 比较 0x30-0x37
 OP_EQ      = 0x30
@@ -832,7 +835,7 @@ class Compiler:
             '<=': OP_LE, '>=': OP_GE,
             '===': OP_EQ,
             '!>': OP_LE, '!<': OP_GE,
-            '<<': None, '>>': None, '>>>': None, '<<<': None,
+            '<<': OP_SHL, '>>': OP_SHR, '>>>': OP_USHR,
             '&': None, '|': None,
         }
         if op in op_map:

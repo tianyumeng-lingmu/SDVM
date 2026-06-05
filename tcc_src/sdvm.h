@@ -105,6 +105,9 @@ typedef enum {
     OP_MOD       = 0x24,
     OP_NEG       = 0x25,
     OP_IDIV      = 0x26,   /* 整数除法 (a /^ b) */
+    OP_SHL       = 0x27,   /* 左移 (a << b) */
+    OP_SHR       = 0x28,   /* 右移 (a >> b) */
+    OP_USHR      = 0x29,   /* 无符号右移 (a >>> b) */
 
     /* 比较运算 0x30-0x37 */
     OP_EQ        = 0x30,

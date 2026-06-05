@@ -317,6 +317,9 @@ const char* sdvm_opname(uint8_t op) {
     case OP_MUL:    return "MUL";
     case OP_DIV:    return "DIV";
     case OP_IDIV:   return "IDIV";
+    case OP_SHL:    return "SHL";
+    case OP_SHR:    return "SHR";
+    case OP_USHR:   return "USHR";
     case OP_MOD:    return "MOD";
     case OP_NEG:    return "NEG";
     case OP_EQ:     return "EQ";
@@ -2104,6 +2107,43 @@ int sdvm_run(SDVM* vm) {
                 Value r = { .type = VAL_FLOAT, .data.float_val = -val_to_double(&a) };
                 PUSH(r);
             }
+            break;
+        }
+
+        case OP_SHL: {
+            Value b, a;
+            POP(b); POP(a);
+            if (a.type != VAL_INT || b.type != VAL_INT) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "左移: 操作数必须为整数");
+                vm->has_error = 1; return -1;
+            }
+            Value r = { .type = VAL_INT, .data.int_val = a.data.int_val << b.data.int_val };
+            PUSH(r);
+            break;
+        }
+
+        case OP_SHR: {
+            Value b, a;
+            POP(b); POP(a);
+            if (a.type != VAL_INT || b.type != VAL_INT) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "右移: 操作数必须为整数");
+                vm->has_error = 1; return -1;
+            }
+            Value r = { .type = VAL_INT, .data.int_val = a.data.int_val >> b.data.int_val };
+            PUSH(r);
+            break;
+        }
+
+        case OP_USHR: {
+            Value b, a;
+            POP(b); POP(a);
+            if (a.type != VAL_INT || b.type != VAL_INT) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "无符号右移: 操作数必须为整数");
+                vm->has_error = 1; return -1;
+            }
+            unsigned long long ua = (unsigned long long)a.data.int_val;
+            Value r = { .type = VAL_INT, .data.int_val = (long long)(ua >> b.data.int_val) };
+            PUSH(r);
             break;
         }
 
