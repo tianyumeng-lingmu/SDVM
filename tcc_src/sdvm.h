@@ -12,6 +12,23 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* ═══════════════════════════════════════════════
+   跨平台 FFI 抽象层
+   — sdvm.c 中负责引入平台相关头文件（Win32 在本地 winsock2.h 之后引入 windows.h）
+   ═══════════════════════════════════════════════ */
+#ifdef _WIN32
+    #define FFI_HANDLE      void*
+    #define FFI_LOAD(n)     ((void*)LoadLibraryA(n))
+    #define FFI_FREE(h)     FreeLibrary((void*)(h))
+    #define FFI_GET_PROC(h, n)  ((void*)(intptr_t)GetProcAddress((void*)(h), (n)))
+#else
+    #include <dlfcn.h>
+    #define FFI_HANDLE      void*
+    #define FFI_LOAD(n)     dlopen(n, RTLD_LAZY | RTLD_LOCAL)
+    #define FFI_FREE(h)     dlclose(h)
+    #define FFI_GET_PROC(h, n)  dlsym(h, n)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -243,6 +260,14 @@ typedef struct {
 #define STACK_MAX   4096
 #define STRPOOL_MAX 4096
 #define CODE_MAX   (1024 * 64)    /* 最大字节码 64KB */
+#define FFI_CACHE_SIZE 128        /* FFI 函数指针缓存 */
+
+/* FFI 函数指针缓存条目 */
+typedef struct {
+    int64_t handle;        /* DLL 句柄 (0 = 空槽) */
+    char*   func_name;     /* 函数名字符串 (堆分配) */
+    void*   func_ptr;      /* 缓存函数指针 */
+} FFICacheEntry;
 
 typedef struct {
     uint8_t*  code;           /* 字节码缓冲区 (主代码 + 所有函数代码) */
@@ -282,6 +307,9 @@ typedef struct {
 
     Object*   objects[256];   /* 跟踪分配的对象，用于清理 */
     int       object_count;
+
+    /* FFI 函数指针缓存 */
+    FFICacheEntry ffi_cache[FFI_CACHE_SIZE];
 } SDVM;
 
 /* ═══════════════════════════════════════════════

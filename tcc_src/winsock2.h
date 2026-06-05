@@ -6,7 +6,9 @@
 
 typedef uintptr_t SOCKET;
 typedef struct { int len; char* buf; } WSABUF;
+#ifndef FFI_HAS_WINDOWS_H
 typedef struct { uintptr_t Internal; uintptr_t InternalHigh; union { struct { uint32_t Offset; uint32_t OffsetHigh; }; void* Pointer; }; void* hEvent; } OVERLAPPED;
+#endif
 typedef void (*LPWSAOVERLAPPED_COMPLETION_ROUTINE)(uint32_t, uint32_t, void*, uint32_t, uint32_t);
 
 #define INVALID_SOCKET (~0ULL)
@@ -51,7 +53,9 @@ struct sockaddr_in {
 #define INADDR_BROADCAST 0xffffffff
 
 #define SOMAXCONN 0x7fffffff
+#ifndef MAKEWORD
 #define MAKEWORD(a,b) ((unsigned short)(((unsigned char)(a)) | ((unsigned short)((unsigned char)(b))) << 8))
+#endif
 
 /* Winsock functions */
 unsigned short htons(unsigned short hostshort);

@@ -33,6 +33,13 @@ static char* tcc_strdup(const char* s) {
 /* copy包的临时存储区 */
 static Value s_copy_temp = { .type = VAL_NULL };
 
+/* ─── Win32 API（用于 FFI）— 在本地 winsock2.h 之前引入 ── */
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#define FFI_HAS_WINDOWS_H  /* 告知本地 winsock2.h 跳过已定义的 OVERLAPPED */
+#endif
+
 /* ─── Winsock 网络支持 ────────────────────── */
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -42,12 +49,6 @@ static Value s_copy_temp = { .type = VAL_NULL };
 static int _winsock_inited = 0;
 
 /* ─── FFI 动态库加载 ────────────────────── */
-/* Windows DLL loading declarations (TCC compatible) */
-typedef void* HMODULE;
-HMODULE LoadLibraryA(const char*);
-void* GetProcAddress(HMODULE, const char*);
-int FreeLibrary(HMODULE);
-
 /* FFI 调用函数指针类型 (最多 8 个 int64 参数) */
 typedef int64_t (*ffi_fn_0)();
 typedef int64_t (*ffi_fn_1)(int64_t);
@@ -58,6 +59,49 @@ typedef int64_t (*ffi_fn_5)(int64_t, int64_t, int64_t, int64_t, int64_t);
 typedef int64_t (*ffi_fn_6)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
 typedef int64_t (*ffi_fn_7)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
 typedef int64_t (*ffi_fn_8)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t);
+
+/* ─── FFI 函数指针缓存 ────────────────────── */
+static int ffi_cache_find(SDVM* vm, int64_t handle, const char* name) {
+    for (int i = 0; i < FFI_CACHE_SIZE; i++) {
+        if (vm->ffi_cache[i].handle == handle &&
+            vm->ffi_cache[i].func_name &&
+            strcmp(vm->ffi_cache[i].func_name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int ffi_cache_store(SDVM* vm, int64_t handle, const char* name, void* ptr) {
+    /* 先找空槽 */
+    for (int i = 0; i < FFI_CACHE_SIZE; i++) {
+        if (vm->ffi_cache[i].handle == 0 && !vm->ffi_cache[i].func_name) {
+            vm->ffi_cache[i].handle = handle;
+            vm->ffi_cache[i].func_name = (char*)malloc(strlen(name) + 1);
+            if (vm->ffi_cache[i].func_name) strcpy(vm->ffi_cache[i].func_name, name);
+            vm->ffi_cache[i].func_ptr = ptr;
+            return i;
+        }
+    }
+    /* 满→覆盖最后一槽 (LRU 简化) */
+    free(vm->ffi_cache[FFI_CACHE_SIZE - 1].func_name);
+    vm->ffi_cache[FFI_CACHE_SIZE - 1].handle = handle;
+    vm->ffi_cache[FFI_CACHE_SIZE - 1].func_name = (char*)malloc(strlen(name) + 1);
+    if (vm->ffi_cache[FFI_CACHE_SIZE - 1].func_name) strcpy(vm->ffi_cache[FFI_CACHE_SIZE - 1].func_name, name);
+    vm->ffi_cache[FFI_CACHE_SIZE - 1].func_ptr = ptr;
+    return FFI_CACHE_SIZE - 1;
+}
+
+static void ffi_cache_clear_handle(SDVM* vm, int64_t handle) {
+    for (int i = 0; i < FFI_CACHE_SIZE; i++) {
+        if (vm->ffi_cache[i].handle == handle) {
+            free(vm->ffi_cache[i].func_name);
+            vm->ffi_cache[i].handle = 0;
+            vm->ffi_cache[i].func_name = NULL;
+            vm->ffi_cache[i].func_ptr = NULL;
+        }
+    }
+}
 
 static int ensure_winsock(void) {
     if (_winsock_inited) return 0;
@@ -1358,7 +1402,7 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
             vm->has_error = 1; return -1;
         }
         const char* path = path_v.data.str_val ? path_v.data.str_val : "";
-        HMODULE hMod = LoadLibraryA(path);
+        FFI_HANDLE hMod = (FFI_HANDLE)FFI_LOAD(path);
         if (!hMod) {
             snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_load: 无法加载库 '%s'", path);
             vm->has_error = 1; return -1;
@@ -1375,29 +1419,40 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
             vm->has_error = 1; return -1;
         }
         Value h_v = vm->stack[vm->sp--];
-        HMODULE hMod = (HMODULE)(intptr_t)h_v.data.int_val;
-        if (hMod) FreeLibrary(hMod);
+        int64_t hMod_val = h_v.data.int_val;
+        if (hMod_val) {
+            FFI_FREE((FFI_HANDLE)(intptr_t)hMod_val);
+            ffi_cache_clear_handle(vm, hMod_val);
+        }
         Value r; r.type = VAL_NULL; PUSH(r);
         break;
     }
 
     case BIF_FFI_CALL: {
         /* ffi_call(handle, name, ret_type, arg1, arg2, ...)
-           调用 C 函数，返回值为 int64 */
+           调用 C 函数，支持缓存加速 */
         if (argc < 3) {
             snprintf(vm->error_msg, sizeof(vm->error_msg), "ffi_call 至少需要 3 个参数 (handle, name, ret_type)");
             vm->has_error = 1; return -1;
         }
         int nargs = argc - 3;  /* 函数实际参数个数 */
 
-        /* 从栈弹出函数参数 (逆序弹出) */
+        /* 从栈弹出函数参数 (逆序弹出，支持 int/float/string 自动转换) */
         int64_t args[16];
         if (nargs > 16) {
             vm->has_error = 1; return -1;
         }
         for (int i = nargs - 1; i >= 0; i--) {
             Value v = vm->stack[vm->sp--];
-            args[i] = val_to_int64(&v);
+            if (v.type == VAL_STRING) {
+                /* 自动传 char* 指针 */
+                args[i] = (int64_t)(intptr_t)(v.data.str_val ? v.data.str_val : "");
+            } else if (v.type == VAL_FLOAT) {
+                int64_t tmp; memcpy(&tmp, &v.data.float_val, sizeof(tmp));
+                args[i] = tmp;
+            } else {
+                args[i] = val_to_int64(&v);
+            }
         }
 
         /* 弹出固定参数: ret_type, name, handle */
@@ -1409,12 +1464,20 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
                                ? ret_type_v.data.str_val : "i";
         const char* func_name = name_v.type == VAL_STRING && name_v.data.str_val
                                 ? name_v.data.str_val : "";
+        int64_t handle_val = handle_v.type == VAL_INT ? handle_v.data.int_val : 0;
         void* func_ptr = NULL;
 
-        if (handle_v.type == VAL_INT) {
-            HMODULE hMod = (HMODULE)(intptr_t)handle_v.data.int_val;
-            if (hMod) {
-                func_ptr = (void*)GetProcAddress(hMod, func_name);
+        /* 查缓存 */
+        if (handle_val) {
+            int cache_idx = ffi_cache_find(vm, handle_val, func_name);
+            if (cache_idx >= 0) {
+                func_ptr = vm->ffi_cache[cache_idx].func_ptr;
+            } else {
+                /* 缓存未命中 → GetProcAddress + 存入缓存 */
+                func_ptr = FFI_GET_PROC((FFI_HANDLE)(intptr_t)handle_val, func_name);
+                if (func_ptr) {
+                    ffi_cache_store(vm, handle_val, func_name, func_ptr);
+                }
             }
         }
         if (!func_ptr) {
@@ -1441,15 +1504,24 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
                 vm->has_error = 1; return -1;
         }
 
-        /* 根据返回类型处理 */
+        /* 根据返回类型处理:
+           "v" = void, "f" = double, "i" = int64, "s" = string, "p" = 指针 */
         if (ret_type[0] == 'v') {
             Value r; r.type = VAL_NULL; PUSH(r);
         } else if (ret_type[0] == 'f') {
             double d;
             memcpy(&d, &result, sizeof(d));
             Value r; r.type = VAL_FLOAT; r.data.float_val = d; PUSH(r);
+        } else if (ret_type[0] == 's') {
+            /* char* 返回 → 拷贝到 VM 堆，返回 VAL_STRING */
+            const char* cstr = (const char*)(intptr_t)result;
+            const char* heap_str = sdvm_heap_strdup(vm, cstr ? cstr : "");
+            Value r; r.type = VAL_STRING; r.data.str_val = heap_str; PUSH(r);
+        } else if (ret_type[0] == 'p') {
+            /* 指针返回 → 包装为 int64 (opaque handle) */
+            Value r; r.type = VAL_INT; r.data.int_val = result; PUSH(r);
         } else {
-            /* 默认返回 int */
+            /* 默认返回 int64 */
             Value r; r.type = VAL_INT; r.data.int_val = result; PUSH(r);
         }
         break;
@@ -2606,6 +2678,12 @@ void sdvm_free(SDVM* vm) {
         vm->heap_strs = NULL;
         vm->heap_str_count = 0;
         vm->heap_str_cap = 0;
+    }
+
+    /* 释放 FFI 缓存 */
+    for (int i = 0; i < FFI_CACHE_SIZE; i++) {
+        free(vm->ffi_cache[i].func_name);
+        vm->ffi_cache[i].func_name = NULL;
     }
 
     /* 释放对象 */
