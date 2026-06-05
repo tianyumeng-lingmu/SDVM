@@ -85,3 +85,12 @@ thing Beep(freq, ms) {
     ffi_call(k, "Beep", "v", freq, ms);
     return 0;
 }
+
+// ─── 进程控制 ────────────────────────────────
+
+// 退出当前进程 (exit_code: 0=正常, 其他=错误码)
+thing exit(exit_code) {
+    int k = ffi_load("kernel32.dll");
+    ffi_call(k, "ExitProcess", "v", exit_code);
+    return(0);  // 实际不会执行，ExitProcess 不返回
+}
