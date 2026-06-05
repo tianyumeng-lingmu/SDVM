@@ -72,6 +72,7 @@ OP_MUL     = 0x22
 OP_DIV     = 0x23
 OP_MOD     = 0x24
 OP_NEG     = 0x25
+OP_IDIV    = 0x26  # 整数除法
 
 # 比较 0x30-0x37
 OP_EQ      = 0x30
@@ -826,7 +827,7 @@ class Compiler:
         self.compile_expression(expr.right)
         op_map = {
             '+': OP_ADD, '-': OP_SUB, '*': OP_MUL, '/': OP_DIV,
-            '%': OP_MOD,
+            '/^': OP_IDIV, '%': OP_MOD,
             '==': OP_EQ, '!=': OP_NE, '<': OP_LT, '>': OP_GT,
             '<=': OP_LE, '>=': OP_GE,
             '===': OP_EQ,

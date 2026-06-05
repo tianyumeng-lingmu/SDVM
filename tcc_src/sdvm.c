@@ -316,6 +316,7 @@ const char* sdvm_opname(uint8_t op) {
     case OP_SUB:    return "SUB";
     case OP_MUL:    return "MUL";
     case OP_DIV:    return "DIV";
+    case OP_IDIV:   return "IDIV";
     case OP_MOD:    return "MOD";
     case OP_NEG:    return "NEG";
     case OP_EQ:     return "EQ";
@@ -2058,6 +2059,22 @@ int sdvm_run(SDVM* vm) {
                     .data.float_val = val_to_double(&a) / bd };
                 PUSH(r);
             }
+            break;
+        }
+
+        case OP_IDIV: {
+            Value b, a;
+            POP(b); POP(a);
+            if (a.type != VAL_INT || b.type != VAL_INT) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "整除: 操作数必须为整数");
+                vm->has_error = 1; return -1;
+            }
+            if (b.data.int_val == 0) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "整除: 除数为零");
+                vm->has_error = 1; return -1;
+            }
+            Value r = { .type = VAL_INT, .data.int_val = a.data.int_val / b.data.int_val };
+            PUSH(r);
             break;
         }
 

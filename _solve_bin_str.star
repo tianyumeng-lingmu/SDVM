@@ -1,0 +1,107 @@
+// _solve_bin_str.star
+// 二进制连接字符串问题：0|1|10|11|100|101|...
+// 求前 x 位中 1 的个数
+//
+// 算法：按 bit-length 分组
+// k-bit 组: 2^(k-1) 个数字，每个 k 位
+//   组内总位数 bg = k * 2^(k-1)
+//   组内总 1 数 og = 2^(k-1) + (k-1) * 2^(k-2)
+//
+// 使用 /^（整数除法）代替手写的 idiv
+
+main {
+    thing main() {
+        see("solve(0)="); see(solve(0)); see("\n");
+        see("solve(1)="); see(solve(1)); see("\n");
+        see("solve(7)="); see(solve(7)); see("\n");
+        see("solve(10)="); see(solve(10)); see("\n");
+        see("solve(100)="); see(solve(100)); see("\n");
+        see("solve(1000)="); see(solve(1000)); see("\n");
+    }
+}
+
+// ─── 求 0..n 所有整数的二进制中 1 的总数 ──
+// 算法：对每个二进制位 i，统计该位为 1 的数字个数
+// 每 2^(i+1) 为一个周期，前 2^i 个该位为 0，后 2^i 个为 1
+thing popcount_sum(n) {
+    if (n <= 0) return 0;
+    count = 0;
+    i = 0;
+    while (1) {
+        pi = 1; j = 0; while (j < i) { pi = pi * 2; j = j + 1; }
+        if (pi > n) break;
+        pi1 = pi * 2;
+        block = pi1;
+        full = (n + 1) /^ block;
+        rem = (n + 1) - full * block;
+        count = count + full * pi;
+        if (rem > pi) {
+            count = count + (rem - pi);
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// ─── 求 num 的前 bits 位中 1 的个数（从 MSB）─
+thing popcount_prefix(num, bits) {
+    count = 0;
+    n = num;
+    // bit_len（乘法实现，避免除法）
+    total = 0;
+    tn = 1;
+    if (num == 0) { total = 1; }
+    else { while (tn <= num) { total = total + 1; tn = tn * 2; } }
+    // 逐位检查，从最高位开始
+    shift = total - 1;
+    i = 0;
+    while (i < bits) {
+        bv = 1; j = 0; while (j < shift) { bv = bv * 2; j = j + 1; }
+        if (n >= bv) {
+            count = count + 1;
+            n = n - bv;
+        }
+        shift = shift - 1;
+        i = i + 1;
+    }
+    return count;
+}
+
+// ─── 主求解函数 ─────────────────────────
+thing solve(x) {
+    if (x <= 1) return 0;
+    total_ones = 0;
+    bits_used = 1;
+    if (bits_used + 1 >= x) { return x - bits_used; }
+    bits_used = bits_used + 1;
+    total_ones = total_ones + 1;
+    m = 2;
+    while (1) {
+        // nc = 2^(m-1): m-bit 组中的数字个数
+        nc = 1; j = 0; while (j < m-1) { nc = nc * 2; j = j + 1; }
+        bg = m * nc;                          // 组内总位数
+        pm2 = 1; j = 0; while (j < m-2) { pm2 = pm2 * 2; j = j + 1; }
+        og = nc + (m - 1) * pm2;              // 组内总 1 数
+        if (bits_used + bg < x) {
+            bits_used = bits_used + bg;
+            total_ones = total_ones + og;
+            m = m + 1;
+        } else {
+            rem = x - bits_used;
+            fn = rem /^ m;       // 完整数字个数（使用原生的整数除法）
+            pb = rem - fn * m;   // 最后数字的部分位数
+            k = fn - 1;
+            if (k >= 0) {
+                total_ones = total_ones + (k + 1);       // 每个数字的首位为 1
+                total_ones = total_ones + popcount_sum(k); // 非首位的 1
+            }
+            if (pb > 0) {
+                pm1 = 1; j = 0; while (j < m-1) { pm1 = pm1 * 2; j = j + 1; }
+                num = pm1 + fn;
+                total_ones = total_ones + popcount_prefix(num, pb);
+            }
+            break;
+        }
+    }
+    return total_ones;
+}
