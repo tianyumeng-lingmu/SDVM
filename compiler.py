@@ -362,8 +362,19 @@ class Compiler:
         """返回包目录路径 (compiler.py 同级的 packages/)"""
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'packages')
 
-    def _import_package(self, package_name: str):
-        """导入包：找到并解析 packages/{name}.star，将其 thing 声明加入函数表"""
+    def _import_package(self, package_name: str, visited: set = None):
+        """导入包：找到并解析 packages/{name}.star，将其 thing 声明加入函数表
+
+        Args:
+            package_name: 包名 (如 'system')
+            visited: 已导入的包集合（用于递归时检测循环依赖）
+        """
+        if visited is None:
+            visited = set()
+        if package_name in visited:
+            raise CompileError(f"循环包依赖检测: '{package_name}' 已被导入")
+        visited.add(package_name)
+
         pkg_dir = self._get_packages_dir()
         pkg_path = os.path.join(pkg_dir, f'{package_name}.star')
         if not os.path.exists(pkg_path):
@@ -379,12 +390,18 @@ class Compiler:
         parser = Parser(tokens)
         pkg_ast = parser.parse()
 
-        # 验证包文件只能有 thing 声明，不能有 start/main
-        # (parse() 会默认创建空的 StartBlock/MainBlock，所以需要检查是否有实际语句)
-        if (pkg_ast.start_block and len(pkg_ast.start_block.statements) > 0) or \
-           (pkg_ast.main_block and len(pkg_ast.main_block.statements) > 0):
+        # 包文件不允许有 main{} 命途块
+        if pkg_ast.main_block and len(pkg_ast.main_block.statements) > 0:
             raise CompileError(
-                f"包 '{package_name}' 只能包含 thing 函数声明，不能包含 start/main 命途块")
+                f"包 '{package_name}' 不能包含 main 命途块")
+
+        # 处理包内的 start{} 块：递归处理 use 语句（包依赖）
+        if pkg_ast.start_block:
+            for stmt in pkg_ast.start_block.statements:
+                if isinstance(stmt, UseStmt):
+                    self._import_package(stmt.package_name, visited)
+                # 非 use 语句（如初始化代码）暂时不处理
+                # 后续可扩展为编译注入到主程序的 start 块中
 
         # 将包内的 thing 声明加入当前编译的函数表
         for decl in pkg_ast.func_decls:
@@ -398,11 +415,6 @@ class Compiler:
             func = FuncDef(decl.name, decl.params, decl.body)
             self.func_defs.append(func)
             self.func_map[decl.name] = func_index
-
-        # 如果有 context 标记需要后续编译，记录下来
-        for func in self.func_defs:
-            if func.name not in [d.name for d in pkg_ast.func_decls]:
-                continue
 
     # ─── 主编译入口 ─────────────────────────────
     def compile(self, ast: Program):
