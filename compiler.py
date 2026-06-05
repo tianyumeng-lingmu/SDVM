@@ -158,6 +158,9 @@ BIF_LIST_COPY    = 39  # list.copy()
 BIF_COPY_COPY    = 40  # copy.copy(a): 存入临时区
 BIF_COPY_PASTE   = 41  # copy.paste(): 粘贴返回
 BIF_COPY_CLEAN   = 42  # copy.clean(): 清除临时区
+BIF_CLONE        = 43  # val.clone(): 浅拷贝语法糖
+BIF_DEEPCLONE    = 44  # val.deepclone(): 深拷贝语法糖
+BIF_COPY_DEEPCOPY = 45 # copy.deepcopy(val): 深拷贝存入临时区
 
 BIF_MAP = {
     'see': BIF_SEE,
@@ -205,9 +208,10 @@ LIST_BIF_MAP = {
 }
 
 COPY_BIF_MAP = {
-    'copy':  BIF_COPY_COPY,
-    'paste': BIF_COPY_PASTE,
-    'clean': BIF_COPY_CLEAN,
+    'copy':     BIF_COPY_COPY,
+    'paste':    BIF_COPY_PASTE,
+    'clean':    BIF_COPY_CLEAN,
+    'deepcopy': BIF_COPY_DEEPCOPY,
 }
 
 
@@ -1000,37 +1004,45 @@ class Compiler:
             self.emit(OP_CALL)
             self.emit_u32(anon_idx)
             self.emit_u8(len(anon_func.params))
-        elif isinstance(expr.callee, GetAttr) and isinstance(expr.callee.obj, Identifier):
-            # 包限定调用或列表方法: pkg.func() 或 list.add()
-            qualified_name = f"{expr.callee.obj.name}.{expr.callee.attr}"
-            if qualified_name in self.func_map:
-                func_idx = self.func_map[qualified_name]
-                func = self.func_defs[func_idx - 1]
-                ordered_exprs = self._resolve_call_args(func.param_names, expr.args)
-                for arg_expr in ordered_exprs:
-                    self.compile_expression(arg_expr)
-                self.emit(OP_CALL)
-                self.emit_u32(func_idx)
-                self.emit_u8(len(func.param_names))
-            elif expr.callee.obj.name == "copy" and expr.callee.attr in COPY_BIF_MAP:
-                # copy包方法: copy.copy(a), copy.paste(), copy.clean()
-                bif = COPY_BIF_MAP[expr.callee.attr]
-                for arg in expr.args:
-                    self.compile_expression(arg)
+        elif isinstance(expr.callee, GetAttr):
+            if expr.callee.attr in ('clone', 'deepclone'):
+                # 通用克隆方法: val.clone(), val.deepclone()
+                bif = BIF_CLONE if expr.callee.attr == 'clone' else BIF_DEEPCLONE
+                self.compile_expression(expr.callee.obj)
                 self.emit(OP_BIF)
                 self.emit_u8(bif)
-                self.emit_u8(len(expr.args))
-            elif expr.callee.attr in LIST_BIF_MAP:
-                # 列表方法调用: list.add(1), list.pop() 等
-                bif = LIST_BIF_MAP[expr.callee.attr]
-                self.compile_expression(expr.callee.obj)  # 编译列表对象（作为 arg0）
-                for arg in expr.args:
-                    self.compile_expression(arg)
-                self.emit(OP_BIF)
-                self.emit_u8(bif)
-                self.emit_u8(1 + len(expr.args))  # arg_count = 对象 + 参数
-            else:
-                raise CompileError(f"未定义的包函数或列表方法: '{qualified_name}'")
+                self.emit_u8(1)
+            elif isinstance(expr.callee.obj, Identifier):
+                # 包限定调用或列表方法: pkg.func() 或 list.add()
+                qualified_name = f"{expr.callee.obj.name}.{expr.callee.attr}"
+                if qualified_name in self.func_map:
+                    func_idx = self.func_map[qualified_name]
+                    func = self.func_defs[func_idx - 1]
+                    ordered_exprs = self._resolve_call_args(func.param_names, expr.args)
+                    for arg_expr in ordered_exprs:
+                        self.compile_expression(arg_expr)
+                    self.emit(OP_CALL)
+                    self.emit_u32(func_idx)
+                    self.emit_u8(len(func.param_names))
+                elif expr.callee.obj.name == "copy" and expr.callee.attr in COPY_BIF_MAP:
+                    # copy包方法: copy.copy(a), copy.paste(), copy.clean(), copy.deepcopy()
+                    bif = COPY_BIF_MAP[expr.callee.attr]
+                    for arg in expr.args:
+                        self.compile_expression(arg)
+                    self.emit(OP_BIF)
+                    self.emit_u8(bif)
+                    self.emit_u8(len(expr.args))
+                elif expr.callee.attr in LIST_BIF_MAP:
+                    # 列表方法调用: list.add(1), list.pop() 等
+                    bif = LIST_BIF_MAP[expr.callee.attr]
+                    self.compile_expression(expr.callee.obj)  # 编译列表对象（作为 arg0）
+                    for arg in expr.args:
+                        self.compile_expression(arg)
+                    self.emit(OP_BIF)
+                    self.emit_u8(bif)
+                    self.emit_u8(1 + len(expr.args))  # arg_count = 对象 + 参数
+                else:
+                    raise CompileError(f"未定义的包函数或列表方法: '{qualified_name}'")
         else:
             # 复杂 callee 表达式 → 编译 callee 产生函数引用，然后 OP_CALLR
             self.compile_expression(expr.callee)
