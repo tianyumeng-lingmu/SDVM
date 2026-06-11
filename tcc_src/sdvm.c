@@ -132,6 +132,17 @@ static void free_socket_id(SDVM* vm, int id) {
     }
 }
 
+/* 从生成器池分配一个空闲的 GeneratorState */
+static GeneratorState* alloc_generator(SDVM* vm) {
+    for (int i = 0; i < MAX_GENERATORS; i++) {
+        if (!vm->generator_pool[i].in_use) {
+            vm->generator_pool[i].in_use = 1;
+            return &vm->generator_pool[i];
+        }
+    }
+    return NULL;
+}
+
 /* ─── Object 管理 ────────────────────────────── */
 static Object* obj_create(SDVM* vm) {
     Object* obj = (Object*)malloc(sizeof(Object));
@@ -284,6 +295,11 @@ void sdvm_print_value(const Value* v) {
         printf("}");
         break;
     }
+    case VAL_GENERATOR: {
+        GeneratorState* gs = (GeneratorState*)v->data.ptr_val;
+        printf("<generator:%s>", gs->done ? "exhausted" : "active");
+        break;
+    }
     }
 }
 
@@ -296,6 +312,7 @@ const char* sdvm_value_type_str(const Value* v) {
     case VAL_NULL:   return "null";
     case VAL_FUNC:   return "func";
     case VAL_OBJECT: return "object";
+    case VAL_GENERATOR: return "generator";
     default:         return "unknown";
     }
 }
@@ -334,6 +351,7 @@ const char* sdvm_opname(uint8_t op) {
     case OP_BIF:    return "BIF";
     case OP_RET:    return "RET";
     case OP_HALT:   return "HALT";
+    case OP_PAUSE:  return "PAUSE";
     case OP_CALL:   return "CALL";
     case OP_ANON:   return "ANON";
     case OP_CALLR:  return "CALLR";
@@ -384,6 +402,10 @@ void sdvm_init(SDVM* vm) {
     memset(vm, 0, sizeof(SDVM));
     vm->sp = -1;
     vm->call_sp = -1;
+    /* 生成器池初始化为未使用 */
+    for (int i = 0; i < MAX_GENERATORS; i++) {
+        vm->generator_pool[i].in_use = 0;
+    }
 }
 
 /* ─── 加载 .dance 文件 (支持 v1 和 v2) ───────── */
@@ -485,6 +507,22 @@ int sdvm_load(SDVM* vm, const uint8_t* buffer, size_t size) {
     vm->code = (uint8_t*)malloc(vm->code_size);
     if (!vm->code) goto oom;
     memcpy(vm->code, buffer + off, vm->code_size);
+
+    /* 扫描函数代码，检测包含 OP_PAUSE 的生成器 */
+    for (uint32_t i = 0; i < vm->func_count; i++) {
+        FuncEntry* fe = &vm->func_table[i];
+        uint32_t start = fe->code_offset;
+        uint32_t end = (i + 1 < vm->func_count)
+            ? vm->func_table[i + 1].code_offset
+            : vm->code_size;
+        fe->is_generator = 0;
+        for (uint32_t j = start; j < end && j < vm->code_size; j++) {
+            if (vm->code[j] == OP_PAUSE) {
+                fe->is_generator = 1;
+                break;
+            }
+        }
+    }
 
     return 0;
 
@@ -1827,6 +1865,61 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         break;
     }
 
+    /* ─── next(gen): 获取生成器的下一个值 ─────────── */
+    case BIF_NEXT: {
+        if (vm->sp < 0) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "next(): 栈空");
+            vm->has_error = 1; return -1;
+        }
+        Value gen_v = vm->stack[vm->sp--];
+        if (gen_v.type != VAL_GENERATOR) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "next(): 参数不是生成器 (type=%d)", gen_v.type);
+            vm->has_error = 1; return -1;
+        }
+        GeneratorState* gs = (GeneratorState*)gen_v.data.ptr_val;
+
+        /* 已耗尽 → 推 null */
+        if (gs->done) {
+            Value r; r.type = VAL_NULL;
+            PUSH(r);
+            break;
+        }
+
+        /* 创建调用帧，让生成器知道从哪恢复 */
+        if (vm->call_sp >= MAX_CALL_DEPTH - 1) {
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "next(): 调用栈溢出");
+            vm->has_error = 1; return -1;
+        }
+        vm->call_sp++;
+        CallFrame* cf = &vm->call_stack[vm->call_sp];
+        cf->return_ip = vm->ip;
+        cf->return_sp = vm->sp;  /* 弹出 gen_val 后的位置 */
+        memcpy(cf->saved_locals, vm->locals, sizeof(Value) * LOCALS_MAX);
+        cf->saved_local_count = (uint32_t)vm->local_count;
+        cf->gen_state = gs;
+
+        if (gs->saved_ip == -1) {
+            /* 首次启动生成器 */
+            for (uint32_t i = 0; i < gs->arg_count && i < LOCALS_MAX; i++) {
+                vm->locals[i] = gs->saved_args[i];
+            }
+            for (uint32_t i = gs->arg_count; i < gs->local_count && i < LOCALS_MAX; i++) {
+                vm->locals[i].type = VAL_NULL;
+            }
+            vm->local_count = (int)gs->local_count;
+            vm->ip = vm->func_table[gs->func_idx].code_offset;
+        } else {
+            /* 恢复暂停状态 */
+            for (uint32_t i = 0; i < gs->local_count && i < LOCALS_MAX; i++) {
+                vm->locals[i] = gs->saved_locals[i];
+            }
+            vm->local_count = (int)gs->local_count;
+            vm->ip = (uint32_t)gs->saved_ip;
+        }
+
+        return 0;  /* 继续执行生成器代码 */
+    }
+
     default:
         snprintf(vm->error_msg, sizeof(vm->error_msg),
                  "未知的内置函数索引: %d", bif_idx);
@@ -2304,35 +2397,100 @@ int sdvm_run(SDVM* vm) {
 
         case OP_RET: {
             if (vm->call_sp >= 0) {
-                /* 函数返回: 恢复调用者上下文 */
                 CallFrame* cf = &vm->call_stack[vm->call_sp];
 
-                /* 保存返回值 (如果有，否则为 null) */
-                Value ret_val;
-                if (vm->sp >= 0) {
-                    ret_val = vm->stack[vm->sp];
-                    vm->sp--;
+                if (cf->gen_state != NULL) {
+                    /* 生成器耗尽: 标记 done，返回 null */
+                    GeneratorState* gs = cf->gen_state;
+                    gs->done = 1;
+
+                    /* 丢弃栈顶值（自动生成的 null） */
+                    if (vm->sp >= 0) vm->sp--;
+
+                    memcpy(vm->locals, cf->saved_locals, sizeof(Value) * LOCALS_MAX);
+                    vm->local_count = (int)cf->saved_local_count;
+                    vm->sp = cf->return_sp;
+                    vm->ip = cf->return_ip;
+
+                    vm->sp++;
+                    vm->stack[vm->sp].type = VAL_NULL;
+
+                    vm->call_sp--;
                 } else {
-                    ret_val.type = VAL_NULL;
+                    /* 正常函数返回 */
+                    /* 保存返回值 (如果有，否则为 null) */
+                    Value ret_val;
+                    if (vm->sp >= 0) {
+                        ret_val = vm->stack[vm->sp];
+                        vm->sp--;
+                    } else {
+                        ret_val.type = VAL_NULL;
+                    }
+
+                    /* 恢复调用者的 locals */
+                    memcpy(vm->locals, cf->saved_locals, sizeof(Value) * LOCALS_MAX);
+                    vm->local_count = (int)cf->saved_local_count;
+
+                    /* 恢复 sp 和 ip */
+                    vm->sp = cf->return_sp;
+                    vm->ip = cf->return_ip;
+
+                    /* 把返回值压回调用者的栈 */
+                    vm->sp++;
+                    vm->stack[vm->sp] = ret_val;
+
+                    vm->call_sp--;
                 }
-
-                /* 恢复调用者的 locals */
-                memcpy(vm->locals, cf->saved_locals, sizeof(Value) * LOCALS_MAX);
-                vm->local_count = (int)cf->saved_local_count;
-
-                /* 恢复 sp 和 ip */
-                vm->sp = cf->return_sp;
-                vm->ip = cf->return_ip;
-
-                /* 把返回值压回调用者的栈 */
-                vm->sp++;
-                vm->stack[vm->sp] = ret_val;
-
-                vm->call_sp--;
             } else {
                 /* 顶层返回: 结束程序 */
                 return 0;
             }
+            break;
+        }
+
+        case OP_PAUSE: {
+            /* 暂停生成器，弹出值返回给 next() 调用者 */
+            if (vm->call_sp < 0) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "PAUSE: 无活动调用帧");
+                vm->has_error = 1; return -1;
+            }
+            CallFrame* cf = &vm->call_stack[vm->call_sp];
+            if (cf->gen_state == NULL) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                         "PAUSE: 只能在生成器函数中使用");
+                vm->has_error = 1; return -1;
+            }
+            GeneratorState* gs = cf->gen_state;
+
+            /* 弹出 yield 值 */
+            Value yielded;
+            if (vm->sp >= 0) {
+                yielded = vm->stack[vm->sp];
+                vm->sp--;
+            } else {
+                yielded.type = VAL_NULL;
+            }
+
+            /* 保存生成器状态 */
+            gs->started = 1;
+            gs->done = 0;
+            gs->saved_ip = (int32_t)vm->ip;  /* 已越过 OP_PAUSE */
+            gs->local_count = (uint32_t)vm->local_count;
+            for (int i = 0; i < LOCALS_MAX && i < GENERATOR_LOCALS_MAX; i++) {
+                gs->saved_locals[i] = vm->locals[i];
+            }
+
+            /* 恢复调用者上下文 */
+            memcpy(vm->locals, cf->saved_locals, sizeof(Value) * LOCALS_MAX);
+            vm->local_count = (int)cf->saved_local_count;
+            vm->sp = cf->return_sp;
+            vm->ip = cf->return_ip;
+            vm->call_sp--;
+
+            /* 回弹 yield 值 */
+            vm->sp++;
+            vm->stack[vm->sp] = yielded;
             break;
         }
 
@@ -2367,6 +2525,35 @@ int sdvm_run(SDVM* vm) {
                 vm->has_error = 1; return -1;
             }
 
+            /* ── 生成器函数: 不执行函数体，返回 VAL_GENERATOR ── */
+            if (fe->is_generator) {
+                GeneratorState* gs = alloc_generator(vm);
+                if (!gs) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "生成器池已满");
+                    vm->has_error = 1; return -1;
+                }
+                gs->func_idx = func_idx;
+                gs->saved_ip = -1;
+                gs->done = 0;
+                gs->started = 0;
+                gs->arg_count = arg_count;
+                gs->local_count = fe->local_count;
+
+                /* 保存参数到 GeneratorState */
+                int base = vm->sp - (int)arg_count + 1;
+                for (uint32_t i = 0; i < arg_count && i < GENERATOR_LOCALS_MAX; i++) {
+                    gs->saved_args[i] = vm->stack[base + i];
+                }
+
+                /* 弹出参数 */
+                vm->sp -= (int)arg_count;
+
+                /* 推入生成器值 */
+                Value r; r.type = VAL_GENERATOR; r.data.ptr_val = gs;
+                PUSH(r);
+                break;
+            }
+
             /* 保存调用者上下文 */
             vm->call_sp++;
             CallFrame* cf = &vm->call_stack[vm->call_sp];
@@ -2374,6 +2561,7 @@ int sdvm_run(SDVM* vm) {
             cf->return_sp = vm->sp - (int)arg_count;  /* 弹出参数前的位置 */
             memcpy(cf->saved_locals, vm->locals, sizeof(Value) * LOCALS_MAX);
             cf->saved_local_count = (uint32_t)vm->local_count;
+            cf->gen_state = NULL;
 
             /* 从栈拷贝参数到函数局部变量 slot 0..arg_count-1 */
             int base = vm->sp - (int)arg_count + 1;
@@ -2454,6 +2642,35 @@ int sdvm_run(SDVM* vm) {
                 vm->has_error = 1; return -1;
             }
 
+            /* ── 生成器函数: 不执行函数体，返回 VAL_GENERATOR ── */
+            if (fe->is_generator) {
+                GeneratorState* gs = alloc_generator(vm);
+                if (!gs) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "生成器池已满");
+                    vm->has_error = 1; return -1;
+                }
+                gs->func_idx = func_idx;
+                gs->saved_ip = -1;
+                gs->done = 0;
+                gs->started = 0;
+                gs->arg_count = arg_count;
+                gs->local_count = fe->local_count;
+
+                /* 保存参数: 栈上 [func_ref, arg0, arg1, ..., argN] */
+                int base = vm->sp - (int)arg_count + 1;  /* arg0 的位置 */
+                for (uint32_t i = 0; i < arg_count && i < GENERATOR_LOCALS_MAX; i++) {
+                    gs->saved_args[i] = vm->stack[base + i];
+                }
+
+                /* 弹出 func_ref + 所有参数 */
+                vm->sp -= ((int)arg_count + 1);
+
+                /* 推入生成器值 */
+                Value r; r.type = VAL_GENERATOR; r.data.ptr_val = gs;
+                PUSH(r);
+                break;
+            }
+
             /* 保存调用者上下文 */
             vm->call_sp++;
             CallFrame* cf = &vm->call_stack[vm->call_sp];
@@ -2463,6 +2680,7 @@ int sdvm_run(SDVM* vm) {
             cf->return_sp = vm->sp - (int)arg_count - 1;
             memcpy(cf->saved_locals, vm->locals, sizeof(Value) * LOCALS_MAX);
             cf->saved_local_count = (uint32_t)vm->local_count;
+            cf->gen_state = NULL;
 
             /* 拷贝参数: func_ref 在 base-1, args 在 base..sp */
             int base = vm->sp - (int)arg_count + 1;  /* arg0 的位置 */

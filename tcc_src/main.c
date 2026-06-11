@@ -89,6 +89,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    fflush(stdout);  /* 确保所有输出被刷新 */
     sdvm_free(&vm);
     return 0;
 }

@@ -2,7 +2,7 @@
  * ═══════════════════════════════════════════════
  *  SDVM — 星舞虚拟机 (Star Dance Virtual Machine)
  *  类 JVM 栈式虚拟机，执行 .dance 字节码
- *  版本 2: 支持函数调用 + 匿名函数
+ *  版本 2: 支持函数调用 + 匿名函数 + 生成器(pause)
  * ═══════════════════════════════════════════════
  */
 
@@ -70,6 +70,7 @@ extern "C" {
    │ BIF b1 b1   │ +2   │ 调用内置函数(索引+参数数) │
    │ RET          │ -    │ 返回/函数返回             │
    │ HALT         │ -    │ 停止执行                  │
+   │ PAUSE        │ -    │ 暂停生成器，弹出值返回    │
    │─────────────┼──────┼──────────────────────────┤
    │ 函数调用     │      │                          │
    │ CALL i4 b1  │ +5   │ 调用已命名的函数           │
@@ -126,6 +127,7 @@ typedef enum {
     OP_BIF       = 0x42,   /* +1: bif index, +1: arg count */
     OP_RET       = 0x43,
     OP_HALT      = 0x44,
+    OP_PAUSE     = 0x45,   /* 暂停生成器，弹出值返回给 next() 调用者 */
 
     /* 函数调用 0x50-0x5F */
     OP_CALL      = 0x50,   /* +4: func_idx, +1: arg_count */
@@ -192,7 +194,8 @@ typedef enum {
     BIF_CLONE       = 43, /* copy.clone(a) / a.clone(): 存入临时区并粘贴返回 */
     BIF_DEEPCLONE   = 44, /* copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴返回 */
     BIF_COPY_DEEPCOPY = 45,/* copy.deepcopy(a): 深拷贝存入临时区 */
-    BIF_COUNT   = 46,
+    BIF_NEXT        = 46, /* next(gen): 获取生成器的下一个值，耗尽返回 null */
+    BIF_COUNT   = 47,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════
@@ -207,6 +210,7 @@ typedef enum {
     VAL_NULL,
     VAL_FUNC,      /* 函数引用 (用于匿名字面量) */
     VAL_OBJECT,    /* 对象 */
+    VAL_GENERATOR, /* 生成器 (pause 状态) */
 } ValueType;
 
 typedef struct {
@@ -217,7 +221,7 @@ typedef struct {
         uint8_t     bool_val;
         const char* str_val;
         uint32_t    func_idx;  /* 用于 VAL_FUNC */
-        void*       ptr_val;   /* 用于 VAL_OBJECT */
+        void*       ptr_val;   /* 用于 VAL_OBJECT / VAL_GENERATOR */
     } data;
 } Value;
 
@@ -238,6 +242,25 @@ typedef struct {
 } Object;
 
 /* ═══════════════════════════════════════════════
+   生成器状态
+   ═══════════════════════════════════════════════ */
+#define GENERATOR_LOCALS_MAX 256
+
+typedef struct {
+    uint32_t func_idx;                   /* 所属函数索引 */
+    int32_t  saved_ip;                   /* -1 = 尚未启动 */
+    uint8_t  done;                       /* 1 = 已耗尽 */
+    uint8_t  started;                    /* 1 = 已执行过 */
+    uint8_t  in_use;                     /* 1 = 该槽位被占用 */
+    uint32_t arg_count;                  /* 参数个数 */
+    uint32_t local_count;                /* 暂停时的局部变量数 */
+    Value    saved_args[GENERATOR_LOCALS_MAX];  /* 首次调用时的参数 */
+    Value    saved_locals[GENERATOR_LOCALS_MAX]; /* 暂停时的局部变量 */
+} GeneratorState;
+
+#define MAX_GENERATORS 64
+
+/* ═══════════════════════════════════════════════
    函数表 & 调用栈
    ═══════════════════════════════════════════════ */
 #define MAX_FUNCS      256
@@ -249,6 +272,10 @@ typedef struct {
     uint32_t arg_count;     /* 参数个数 */
     uint32_t local_count;   /* 局部变量数 (含参数) */
     uint32_t code_offset;   /* 在 code 中的偏移量 */
+    uint8_t  is_generator;  /* 1 = 包含 pause 的生成器函数 */
+    uint8_t  _pad0;
+    uint8_t  _pad1;
+    uint8_t  _pad2;
 } FuncEntry;
 
 typedef struct {
@@ -256,6 +283,7 @@ typedef struct {
     int       return_sp;    /* 返回后恢复的 SP */
     Value     saved_locals[LOCALS_MAX];  /* 调用者的局部变量备份 */
     uint32_t  saved_local_count;        /* 调用者的 local_count */
+    GeneratorState* gen_state;          /* 非 NULL 表示生成器帧 */
 } CallFrame;
 
 /* ═══════════════════════════════════════════════
@@ -304,6 +332,9 @@ typedef struct {
     /* 调用栈 */
     CallFrame call_stack[MAX_CALL_DEPTH];
     int       call_sp;        /* -1 = 无活动调用 */
+
+    /* 生成器状态池 */
+    GeneratorState generator_pool[MAX_GENERATORS];
 
     /* 网络套接字表 */
     uintptr_t sockets[64];    /* 套接字句柄，0 = 空闲 */

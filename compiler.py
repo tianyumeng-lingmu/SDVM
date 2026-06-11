@@ -36,7 +36,7 @@ try:
         ForeachStmt, CaseStmt, WhenClause,
         BreakStmt, ContinueStmt, CutDownStmt,
         BinaryOp, UnaryOp, Literal, Identifier,
-        CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt,
+        CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt, PauseStmt,
         ListLiteral, NewExpr, GetAttr, IndexExpr, ThrowStmt, TryStmt,
         AnonymouFunc, NamedArgument, UseStmt,
     )
@@ -94,6 +94,7 @@ OP_JIF     = 0x41  # +4: jump if false
 OP_BIF     = 0x42  # +1: bif_idx, +1: argc
 OP_RET     = 0x43
 OP_HALT    = 0x44
+OP_PAUSE   = 0x45
 
 # 函数 0x50-0x5F
 OP_CALL    = 0x50  # +4: func_idx, +1: arg_count (编译时已知的函数)
@@ -166,6 +167,9 @@ BIF_CLONE        = 43  # copy.clone(a) / a.clone(): 存入临时区并粘贴返�
 BIF_DEEPCLONE    = 44  # copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴返回
 BIF_COPY_DEEPCOPY = 45 # copy.deepcopy(a): 深拷贝存入临时区
 
+BIF_NEXT    = 46  # next(gen): 获取生成器下一个值
+BIF_COUNT   = 47
+
 BIF_MAP = {
     'see': BIF_SEE,
     'int': BIF_INT,
@@ -198,6 +202,7 @@ BIF_MAP = {
     'ffi_free':    BIF_FFI_FREE,
     'ffi_call':    BIF_FFI_CALL,
     'range':       BIF_RANGE,
+    'next':        BIF_NEXT,
 }
 
 
@@ -240,7 +245,7 @@ class FuncDef:
         self.param_names = list(param_names)  # 参数名列表（按顺序）
         self.body = body           # list[ASTNode]
         self.is_anonymous = is_anonymous
-        
+
         # 编译上下文
         self.code = bytearray()
         # 参数占据 slots 0..n-1
@@ -356,33 +361,33 @@ class Compiler:
             offset = target - (bp.offset_pos + 4)
             self.code[bp.offset_pos:bp.offset_pos+4] = struct.pack('<i', offset)
 
-    def _has_return_in_body(self, body) -> bool:
-        """递归检查语句列表中是否包含 return 语句"""
+    def _has_terminator(self, body) -> bool:
+        """递归检查语句列表中是否包含 return 或 pause 语句"""
         for stmt in body:
-            if isinstance(stmt, ReturnStmt):
+            if isinstance(stmt, (ReturnStmt, PauseStmt)):
                 return True
             if isinstance(stmt, Block):
-                if self._has_return_in_body(stmt.statements):
+                if self._has_terminator(stmt.statements):
                     return True
             if isinstance(stmt, IfStmt):
-                if self._has_return_in_body(stmt.then_block):
+                if self._has_terminator(stmt.then_block):
                     return True
-                if stmt.else_block and self._has_return_in_body(stmt.else_block):
+                if stmt.else_block and self._has_terminator(stmt.else_block):
                     return True
             if isinstance(stmt, WhileStmt):
-                if self._has_return_in_body(stmt.body):
+                if self._has_terminator(stmt.body):
                     return True
             if isinstance(stmt, ForStmt):
-                if self._has_return_in_body(stmt.body):
+                if self._has_terminator(stmt.body):
                     return True
             if isinstance(stmt, ForeachStmt):
-                if self._has_return_in_body(stmt.body):
+                if self._has_terminator(stmt.body):
                     return True
             if isinstance(stmt, CaseStmt):
                 for wc in stmt.when_clauses:
-                    if self._has_return_in_body(wc.body):
+                    if self._has_terminator(wc.body):
                         return True
-                if self._has_return_in_body(stmt.else_body):
+                if self._has_terminator(stmt.else_body):
                     return True
         return False
 
@@ -449,9 +454,9 @@ class Compiler:
             qualified_name = f"{package_name}.{decl.name}"
             if qualified_name in self.func_map:
                 continue  # 已导入，跳过（避免循环依赖/重复导入）
-            if not self._has_return_in_body(decl.body):
+            if not self._has_terminator(decl.body):
                 raise CompileError(
-                    f"包 '{package_name}' 中的函数 '{decl.name}' 缺少 return() 语句")
+                    f"包 '{package_name}' 中的函数 '{decl.name}' 缺少 return() 或 pause 语句")
             func_index = len(self.func_defs) + 1  # +1 for main(func 0)
             func = FuncDef(qualified_name, decl.params, decl.body)
             self.func_defs.append(func)
@@ -481,10 +486,11 @@ class Compiler:
                     # 没有 main 命途时，life 声明跳过（暂不支持编译）
                     pass
                 elif isinstance(decl, ThingDecl):
-                    if not self._has_return_in_body(decl.body):
+                    if not self._has_terminator(decl.body):
                         raise CompileError(
-                            f"函数 '{decl.name}' 缺少 return() 语句 — "
-                            f"所有模块级 thing（函数）必须有 return() 语句，即使只是 return(null);"
+                            f"函数 '{decl.name}' 缺少 return() 或 pause 语句 — "
+                            f"所有模块级 thing（函数）必须有 return() 或 pause 语句，"
+                            f"生成器用 pause，普通函数用 return();"
                         )
                     func = FuncDef(decl.name, decl.params, decl.body)
                     self.func_defs.append(func)
@@ -572,6 +578,8 @@ class Compiler:
             if stmt.value:
                 self.compile_expression(stmt.value)
             self.emit(OP_RET)
+        elif isinstance(stmt, PauseStmt):
+            self.compile_pause(stmt)
         elif isinstance(stmt, (LifeDecl, ThingDecl)):
             pass  # 方法声明暂不支持
         elif isinstance(stmt, ThrowStmt):
@@ -584,6 +592,11 @@ class Compiler:
             self.compile_use(stmt)
         else:
             raise CompileError(f"不支持的语句类型: {type(stmt).__name__}")
+
+    def compile_pause(self, stmt: PauseStmt):
+        """编译 pause expr; 发射 OP_PAUSE"""
+        self.compile_expression(stmt.expr)
+        self.emit(OP_PAUSE)
 
     def compile_var_decl(self, stmt):
         slot = self.alloc_local(stmt.name)
