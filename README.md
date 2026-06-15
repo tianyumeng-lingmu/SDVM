@@ -1,8 +1,8 @@
-# ⭐ SDVM — 星舞虚拟机
+# SDVM — 星舞虚拟机
 
 **Star Dance Virtual Machine** — 类 JVM 栈式虚拟机，执行 `.dance` 字节码。
 
-> 当前版本：v2.2 — 支持 FFI、包系统、namespace 调用、life 命途、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算、foreach 遍历
+> 当前版本：v2.3 — 支持 FFI、包系统、namespace 调用、life 命途、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算、foreach 遍历、生成器（pause）
 
 SDVM 由三部分组成：
 - **前端解析器**（Python）— `star_dance/` 词法/语法分析，生成 AST
@@ -11,7 +11,7 @@ SDVM 由三部分组成：
 
 ---
 
-## 📁 目录结构
+## 目录结构
 
 ```
 SDVM/
@@ -43,7 +43,7 @@ SDVM/
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 运行示例
 
@@ -71,7 +71,7 @@ cl sdvm.c main.c /Fe:sdvm_new.exe /I.
 
 ---
 
-## 💻 StarDance 语言语法
+## StarDance 语言语法
 
 ### 程序入口
 
@@ -85,7 +85,7 @@ main {
 }
 ```
 
-模块级 `thing`（函数）必须有 `return()` 语句，可放在 `main` 命途外部：
+模块级 `thing`（函数）必须有 `return()` 或 `pause` 语句，可放在 `main` 命途外部：
 
 ```stardance
 thing double(x) {
@@ -102,7 +102,7 @@ main {
 
 ### 变量声明
 
-```
+```stardance
 int a = 42;
 float pi = 3.14;
 str name = "hello";
@@ -111,13 +111,13 @@ bool flag = true;
 
 不指定初始值则为 `null`：
 
-```
+```stardance
 int x;   // x = null
 ```
 
 ### 控制流
 
-```
+```stardance
 if (x > 0) {
     see("正数");
 } else {
@@ -126,10 +126,10 @@ if (x > 0) {
 
 while (i < 10) {
     see(i);
-    i++;
+    i = i + 1;
 }
 
-for (i = 0; i < 10; i++) {
+for (i = 0; i < 10; i = i + 1) {
     see(i);
 }
 
@@ -148,6 +148,42 @@ continue;   // 继续下一次循环
 cutdown;    // 跳出所有层循环
 ```
 
+### 生成器（Generator）
+
+使用 `pause` 关键字创建生成器函数。调用生成器函数返回一个生成器对象，通过 `next()` 逐次获取值：
+
+```stardance
+thing myrange(from_val, to_val) {
+    var i = from_val;
+    while (i < to_val) {
+        pause i;
+        i = i + 1;
+    }
+    return(null);
+}
+
+main {
+    thing main() {
+        var gen = myrange(3, 8);
+        var v = next(gen);   // 3
+        see(v);
+        v = next(gen);       // 4
+        see(v);
+        v = next(gen);       // 5
+        see(v);
+        v = next(gen);       // null（已耗尽）
+        see(v);
+    }
+}
+```
+
+规则：
+- 包含 `pause` 语句的函数自动成为生成器函数
+- 调用生成器函数时**不执行函数体**，而是返回一个 `VAL_GENERATOR` 对象
+- `next(gen)` 首次启动生成器，之后每次恢复至上一次 `pause` 的位置继续执行
+- 生成器耗尽（函数执行到 `return` 或末尾）后，`next()` 返回 `null`
+- 所有模块级 `thing` 函数必须有 `return` 或 `pause`（二选一）
+
 ### 运算符
 
 | 类型 | 运算符 |
@@ -162,10 +198,10 @@ cutdown;    // 跳出所有层循环
 7 /^ 3          // → 2（整除）
 1 << 5          // → 32（左移）
 100 >> 3        // → 12（右移）
-for (i = 0; i < 10; i++) { ... }  // 自增
+for (i = 0; i < 10; i = i + 1) { ... }  // 自增
 ```
 
-> 💡 注意：`/` 返回浮点数（`7/3=2.33333`），`/^` 返回截断整数（`7/^3=2`）
+> 注意：`/` 返回浮点数（`7/3=2.33333`），`/^` 返回截断整数（`7/^3=2`）
 
 ### 内置函数
 
@@ -179,6 +215,8 @@ for (i = 0; i < 10; i++) { ... }  // 自增
 | `bool(x)` | 转换为布尔值 |
 | `type(x)` | 返回值的类型名 |
 | `len(x)` | 返回长度 |
+| **生成器** | |
+| `next(gen)` | 获取生成器的下一个值，耗尽返回 `null` |
 | **JSON / 文件 I/O** | |
 | `json_encode(obj)` | 将对象编码为 JSON 字符串 |
 | `json_decode(json_str)` | 将 JSON 字符串解码为对象 |
@@ -201,7 +239,7 @@ for (i = 0; i < 10; i++) { ... }  // 自增
 
 ---
 
-## 📦 包系统（Package）
+## 包系统（Package）
 
 `use` 关键字导入包，函数调用须使用 `包名.函数名()` 命名空间语法：
 
@@ -283,7 +321,7 @@ main {
 
 ---
 
-## 🧬 Life 命途（类）
+## Life 命途（类）
 
 StarDance 是面向对象语言，使用 `life` 定义类：
 
@@ -306,11 +344,11 @@ life Animal {
 }
 ```
 
-> ⚠️ life 命途目前仅完成解析器支持，编译器暂未实现运行时（在 `main` 命途所在文件中，`life` 必须嵌套在 `main{}` 内部）。
+> life 命途目前仅完成解析器支持，编译器暂未实现运行时（在 `main` 命途所在文件中，`life` 必须嵌套在 `main{}` 内部）。
 
 ---
 
-## 🏗️ 架构
+## 架构
 
 ### 编译流程
 
@@ -326,22 +364,26 @@ life Animal {
                   （use 导入时递归编译）
 ```
 
-### .dance 二进制格式
+### .dance 二进制格式（v2）
 
 ```
-┌────────┬────────┬──────────┬─────────┬────────┬──────┐
-│ Magic  │Version │StrCount  │ Strings │CodeSize│ Code │
-│ "SDNC" │  u32   │   u32    │ (变长)  │  u32   │(变长)│
-│  4字节  │  4字节  │  4字节    │         │  4字节  │      │
-└────────┴────────┴──────────┴─────────┴────────┴──────┘
+┌────────┬────────┬──────────┬─────────┬──────────┬────────┬──────┐
+│ Magic  │Version │StrCount  │ Strings │FuncCount │ Funcs  │Code  │
+│ "SDNC" │  u32   │   u32    │ (变长)  │   u32    │(变长)  │Size  │
+│  4字节  │  4字节  │  4字节    │         │  4字节    │        │u32   │
+├────────┴────────┴──────────┴─────────┴──────────┴────────┴──────┤
+│                          Code Data (变长)                        │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 - **Magic**: `SDNC` (4 字节)
-- **Version**: 1 (4 字节小端序)
+- **Version**: 2 (4 字节小端序) — v2 支持函数表
 - **StrCount**: 字符串常量数量
-- **Strings**: 每个字符串 = length(u32) + UTF-8 编码内容
-- **CodeSize**: 字节码大小
-- **Code**: 指令序列
+- **Strings**: 每个字符串 = length(u32) + UTF-8 编码内容，以 `0xFFFFFFFF` 结束
+- **FuncCount**: 函数数量（含 main）
+- **Funcs**: 每个函数条目 = name_idx(i32) + arg_count(u32) + local_count(u32) + code_offset(u32)，共 16 字节
+- **CodeSize**: 字节码总大小
+- **Code**: 主代码 + 所有函数代码连续存放
 
 ### 运行时栈
 
@@ -358,27 +400,28 @@ SDVM 使用基于值类型的栈式架构：
 ```
 
 每个 `Value` 包含：
-- `type`: INT / FLOAT / BOOL / STRING / NULL / OBJECT / FUNC
-- `data`: `int64` / `double` / `bool` / `char*` / `void*` (Object指针)
+- `type`: INT / FLOAT / BOOL / STRING / NULL / FUNC / OBJECT / GENERATOR
+- `data`: `int64` / `double` / `bool` / `char*` / `void*` (Object/Generator 指针)
 
 **OBJECT 类型**：`['key1': val1, 'key2': val2]` 字典风格，支持下标访问。
 **FUNC 类型**：匿名函数引用，通过 `anonymou` 关键字创建。
+**GENERATOR 类型**：生成器对象，通过调用含 `pause` 的函数创建。
 
 ### 指令集
 
 | 指令 | Opcode | 说明 |
 |------|--------|------|
 | **栈操作** | | |
-| `ICONST` | 0x00 | 压入 int32 常量 |
-| `FCONST` | 0x01 | 压入 double 常量 |
-| `SCONST` | 0x02 | 压入字符串（常量池索引） |
-| `BCONST` | 0x03 | 压入布尔值 |
-| `NULL` | 0x04 | 压入 null |
-| `DUP` | 0x05 | 复制栈顶 |
-| `POP` | 0x06 | 弹出栈顶 |
+| `ICONST` | 0x01 | 压入 int32 常量（+4 字节） |
+| `FCONST` | 0x02 | 压入 double 常量（+8 字节） |
+| `SCONST` | 0x03 | 压入字符串（常量池索引，+4 字节） |
+| `BCONST` | 0x04 | 压入布尔值（+1 字节） |
+| `NULL` | 0x05 | 压入 null |
+| `DUP` | 0x06 | 复制栈顶 |
+| `POP` | 0x07 | 弹出栈顶 |
 | **局部变量** | | |
-| `LOAD` | 0x10 | 局部变量 → 栈 |
-| `STORE` | 0x11 | 栈 → 局部变量 |
+| `LOAD` | 0x10 | 局部变量 → 栈（+1 字节索引） |
+| `STORE` | 0x11 | 栈 → 局部变量（+1 字节索引） |
 | **算术** | | |
 | `ADD` | 0x20 | + |
 | `SUB` | 0x21 | - |
@@ -398,29 +441,31 @@ SDVM 使用基于值类型的栈式架构：
 | `LE` | 0x34 | <= |
 | `GE` | 0x35 | >= |
 | **逻辑** | | |
-| `NOT` | 0x40 | ! |
+| `NOT` | 0x38 | ! |
 | **控制流** | | |
-| `JMP` | 0x50 | 无条件跳转（相对偏移） |
-| `JIF` | 0x51 | false 时跳转 |
-| `BIF` | 0x52 | 调用内置函数 |
-| `RET` | 0x53 | 返回 |
-| `HALT` | 0x54 | 停止 |
-| `CALL` | 0x55 | 调用函数（函数式） |
-| `CALLR` | 0x56 | 调用函数（过程式） |
-| `ANON` | 0x57 | 创建匿名函数闭包 |
+| `JMP` | 0x40 | 无条件跳转（相对偏移，+4 字节） |
+| `JIF` | 0x41 | false 时跳转（+4 字节） |
+| `BIF` | 0x42 | 调用内置函数（+1 索引 +1 参数数） |
+| `RET` | 0x43 | 返回 |
+| `HALT` | 0x44 | 停止 |
+| `PAUSE` | 0x45 | 暂停生成器，弹出值返回给 `next()` 调用者 |
+| **函数调用** | | |
+| `CALL` | 0x50 | 调用已命名函数（+4 func_idx +1 arg_count） |
+| `ANON` | 0x51 | 推送匿名函数引用（+4 func_idx） |
+| `CALLR` | 0x52 | 动态调用（栈顶为函数引用，+1 arg_count） |
 | **I/O** | | |
-| `PRINT` | 0x60 | 打印栈顶值 |
-| `SCAN` | 0x61 | 读取输入到栈 |
+| `PRINT` | 0x70 | 打印栈顶值 |
+| `SCAN` | 0x71 | 读取输入到栈 |
 | **对象操作** | | |
-| `NEWOBJ` | 0x62 | 创建对象（压栈 key→value→NEWOBJ） |
+| `NEWOBJ` | 0x60 | 创建对象（+1 num_pairs，从栈取 key-value） |
+| `GETATTR` | 0x61 | 属性访问（+4 strpool_idx） |
+| `SETATTR` | 0x62 | 属性赋值（+4 strpool_idx） |
 | `GETINDEX` | 0x63 | 下标访问 `obj[idx]` |
 | `SETINDEX` | 0x64 | 下标赋值 `obj[idx]=val` |
-| `GETATTR` | 0x65 | 属性访问 `obj.attr` → value |
-| `SETATTR` | 0x66 | 属性赋值 `obj.attr = val` |
 
 ---
 
-## 🛠️ 开发
+## 开发
 
 ### 运行全部测试
 
@@ -439,8 +484,8 @@ sdvm_new.exe tcc_src\test_xxx.dance
 
 ---
 
-## 📝 注意
+## 注意
 
 - **Windows 编码**：控制台需要在 UTF-8 模式下运行（`chcp 65001`），运行时已自动设置
-- **函数必须有 return()**：所有模块级 `thing` 函数必须以 `return()` 结尾（可返回 null）
+- **函数必须有 return() 或 pause**：所有模块级 `thing` 函数必须以 `return()` 或 `pause` 结尾（生成器用 pause，普通函数用 return）
 - **包命名空间**：包函数必须使用 `包名.函数名()` 方式调用，不可直接暴露到全局
