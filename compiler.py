@@ -642,6 +642,13 @@ class Compiler:
                 if not self._is_pass_only(item.body):
                     is_abstract = False
 
+        # 约束：抽象命途不能 join 抽象命途
+        if parent_name and parent_name in self.class_infos:
+            parent_info = self.class_infos[parent_name]
+            if is_abstract and parent_info.is_abstract:
+                raise CompileError(
+                    f"错误: 抽象命途 '{class_name}' 不能 join 抽象命途 '{parent_name}'")
+
         # 2. 为每个方法编译函数（ClassName_methodName）
         method_funcs = {}  # method_name -> func_name
         for method_name, method in methods.items():
@@ -671,6 +678,11 @@ class Compiler:
             init_code.append(0)
         # 为每个方法设置属性
         for method_name, func_name in method_funcs.items():
+            # 非抽象命途中的 pass-only 方法 = 显性留白，保留父类版本
+            if not is_abstract:
+                method_decl = methods.get(method_name)
+                if method_decl and self._is_pass_only(method_decl.body):
+                    continue  # 跳过 pass-only 方法，不覆盖父类
             func_idx = self.func_map.get(func_name)
             if func_idx:
                 init_code.append(OP_DUP)  # [obj, obj]
