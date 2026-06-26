@@ -217,6 +217,8 @@ for (i = 0; i < 10; i = i + 1) { ... }  // 自增
 | `len(x)` | 返回长度 |
 | **生成器** | |
 | `next(gen)` | 获取生成器的下一个值，耗尽返回 `null` |
+| **开发辅助** | |
+| `todo(msg?)` | 未实现警告，输出 `W18: 方法未实现：msg` 到 stderr |
 | **JSON / 文件 I/O** | |
 | `json_encode(obj)` | 将对象编码为 JSON 字符串 |
 | `json_decode(json_str)` | 将 JSON 字符串解码为对象 |
