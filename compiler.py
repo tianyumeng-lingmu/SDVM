@@ -169,7 +169,8 @@ BIF_DEEPCLONE    = 44  # copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴�
 BIF_COPY_DEEPCOPY = 45 # copy.deepcopy(a): 深拷贝存入临时区
 
 BIF_NEXT    = 46  # next(gen): 获取生成器下一个值
-BIF_COUNT   = 47
+BIF_TODO    = 47  # todo(msg): 未实现警告
+BIF_COUNT   = 48
 
 BIF_MAP = {
     'see': BIF_SEE,
@@ -204,6 +205,7 @@ BIF_MAP = {
     'ffi_call':    BIF_FFI_CALL,
     'range':       BIF_RANGE,
     'next':        BIF_NEXT,
+    'todo':        BIF_TODO,
 }
 
 

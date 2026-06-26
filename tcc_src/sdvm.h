@@ -196,7 +196,8 @@ typedef enum {
     BIF_DEEPCLONE   = 44, /* copy.deepclone(a) / a.deepclone(): 深拷贝并粘贴返回 */
     BIF_COPY_DEEPCOPY = 45,/* copy.deepcopy(a): 深拷贝存入临时区 */
     BIF_NEXT        = 46, /* next(gen): 获取生成器的下一个值，耗尽返回 null */
-    BIF_COUNT   = 47,
+    BIF_TODO        = 47, /* todo(msg): 未实现方法警告 */
+    BIF_COUNT   = 48,
 } BifIndex;
 
 /* ═══════════════════════════════════════════════

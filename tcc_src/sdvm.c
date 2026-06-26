@@ -1921,6 +1921,23 @@ static int dispatch_bif(SDVM* vm, int bif_idx, int argc) {
         return 0;  /* 继续执行生成器代码 */
     }
 
+    case BIF_TODO: {
+        /* W18: 方法未实现警告 */
+        fprintf(stderr, "W18: 方法未实现");
+        if (argc >= 1 && vm->sp >= 0) {
+            Value msg = vm->stack[vm->sp];  /* 参数在栈顶 */
+            if (msg.type == VAL_STRING && msg.data.str_val) {
+                fprintf(stderr, "：%s", msg.data.str_val);
+            }
+            vm->sp--;  /* 弹出参数 */
+        }
+        fprintf(stderr, "\n");
+        fflush(stderr);
+        Value r; r.type = VAL_NULL;
+        PUSH(r);
+        break;
+    }
+
     default:
         snprintf(vm->error_msg, sizeof(vm->error_msg),
                  "未知的内置函数索引: %d", bif_idx);
