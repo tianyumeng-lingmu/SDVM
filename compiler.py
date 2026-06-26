@@ -36,7 +36,7 @@ try:
         ForeachStmt, CaseStmt, WhenClause,
         BreakStmt, ContinueStmt, CutDownStmt,
         BinaryOp, UnaryOp, Literal, Identifier,
-        CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt, PauseStmt,
+        CallExpr, ExprStmt, LifeDecl, ThingDecl, ReturnStmt, PauseStmt, PassStmt,
         ListLiteral, NewExpr, GetAttr, IndexExpr, ThrowStmt, TryStmt,
         AnonymouFunc, NamedArgument, UseStmt,
     )
@@ -60,6 +60,7 @@ OP_BCONST  = 0x04  # +1: 0/1
 OP_NULL    = 0x05
 OP_DUP     = 0x06
 OP_POP     = 0x07
+OP_SWAP    = 0x08
 
 # 局部变量 0x10-0x1F
 OP_LOAD    = 0x10  # +1: local index
@@ -257,6 +258,15 @@ class FuncDef:
         self.code_offset = 0  # 最终布局时填入
 
 
+class ClassInfo:
+    """类定义元数据"""
+    def __init__(self, name, parent_name=None):
+        self.name = name
+        self.parent_name = parent_name
+        self.methods = {}       # method_name → func_name
+        self.is_abstract = False
+
+
 class Compiler:
     """.star → .dance 编译器"""
 
@@ -276,6 +286,9 @@ class Compiler:
         self.func_map = {}               # name → index in func_defs
         self._saved_ctx = None           # 函数上下文切换时使用
         self.foreach_counter = 0         # foreach 临时变量唯一 ID
+
+        # 类表
+        self.class_infos = {}            # class_name → ClassInfo
 
     # ─── 上下文切换 ────────────────────────────
     def _push_func_context(self, func):
@@ -483,8 +496,7 @@ class Compiler:
             func_index = 1  # index 0 是 main
             for decl in ast.func_decls:
                 if isinstance(decl, LifeDecl):
-                    # 没有 main 命途时，life 声明跳过（暂不支持编译）
-                    pass
+                    func_index = self._compile_life(decl, func_index)
                 elif isinstance(decl, ThingDecl):
                     if not self._has_terminator(decl.body):
                         raise CompileError(
@@ -515,7 +527,7 @@ class Compiler:
                             self.func_map[stmt.name] = func_index
                             func_index += 1
                     elif isinstance(stmt, LifeDecl):
-                        pass  # life 暂不支持编译
+                        func_index = self._compile_life(stmt, func_index)
 
                 if main_entry_body is None:
                     raise CompileError(
@@ -533,10 +545,12 @@ class Compiler:
             # 5. 编译各个函数
             for func in self.func_defs:
                 self._push_func_context(func)
-                self._compile_body(func.body)
-                # 函数末尾自动添加 return(null) 确保函数有返回值
-                self.emit(OP_NULL)
-                self.emit(OP_RET)
+                if func.body:
+                    self._compile_body(func.body)
+                    # 函数末尾自动添加 return(null) 确保函数有返回值
+                    self.emit(OP_NULL)
+                    self.emit(OP_RET)
+                # body 为空的函数（如类初始化函数）已在创建时手动生成字节码
                 self.resolve_backpatches()
                 self._pop_func_context(func)
 
@@ -580,8 +594,10 @@ class Compiler:
             self.emit(OP_RET)
         elif isinstance(stmt, PauseStmt):
             self.compile_pause(stmt)
+        elif isinstance(stmt, PassStmt):
+            pass  # pass 不生成任何代码
         elif isinstance(stmt, (LifeDecl, ThingDecl)):
-            pass  # 方法声明暂不支持
+            pass  # 方法声明暂不支持编译
         elif isinstance(stmt, ThrowStmt):
             raise CompileError("try/throw 暂不支持编译到 .dance")
         elif isinstance(stmt, TryStmt):
@@ -597,6 +613,84 @@ class Compiler:
         """编译 pause expr; 发射 OP_PAUSE"""
         self.compile_expression(stmt.expr)
         self.emit(OP_PAUSE)
+
+    def _is_pass_only(self, body) -> bool:
+        """检查方法体是否只包含 pass 语句（或空）"""
+        if not body:
+            return True
+        for stmt in body:
+            if isinstance(stmt, PassStmt):
+                continue
+            if isinstance(stmt, Block):
+                if self._is_pass_only(stmt.statements):
+                    continue
+                return False
+            return False
+        return True
+
+    def _compile_life(self, stmt: LifeDecl, func_index: int) -> int:
+        """编译 life 命途，返回更新后的 func_index"""
+        class_name = stmt.name
+        parent_name = stmt.parent
+
+        # 1. 收集方法并检查是否为抽象类
+        methods = {}  # method_name -> ThingDecl
+        is_abstract = True
+        for item in stmt.body:
+            if isinstance(item, ThingDecl):
+                methods[item.name] = item
+                if not self._is_pass_only(item.body):
+                    is_abstract = False
+
+        # 2. 为每个方法编译函数（ClassName_methodName）
+        method_funcs = {}  # method_name -> func_name
+        for method_name, method in methods.items():
+            func_name = f"{class_name}_{method_name}"
+            method_funcs[method_name] = func_name
+            params = ['this'] + list(method.params)
+            func = FuncDef(func_name, params, method.body)
+            self.func_defs.append(func)
+            self.func_map[func_name] = func_index
+            func_index += 1
+
+        # 3. 编译类初始化函数 ClassName_class_init（直接生成字节码）
+        init_func_name = f"{class_name}_class_init"
+        init_func = FuncDef(init_func_name, [], [])
+        # 手动生成类初始化的字节码
+        init_code = init_func.code
+        if parent_name and parent_name in self.class_infos:
+            # 调用父类 class_init
+            parent_init_idx = self.func_map.get(f"{parent_name}_class_init")
+            if parent_init_idx:
+                init_code.append(OP_CALL)
+                init_code.extend(struct.pack('<I', parent_init_idx))
+                init_code.append(0)
+        else:
+            # 创建空对象：NEWOBJ 0（0 个键值对）
+            init_code.append(OP_NEWOBJ)
+            init_code.append(0)
+        # 为每个方法设置属性
+        for method_name, func_name in method_funcs.items():
+            func_idx = self.func_map.get(func_name)
+            if func_idx:
+                init_code.append(OP_DUP)  # [obj, obj]
+                init_code.append(OP_ANON)
+                init_code.extend(struct.pack('<I', func_idx))  # [obj, obj, func_ref]
+                init_code.append(OP_SETATTR)
+                init_code.extend(struct.pack('<I', self.add_string(method_name)))  # [obj, func_ref]
+                init_code.append(OP_POP)  # [obj]
+        init_code.append(OP_RET)
+        self.func_defs.append(init_func)
+        self.func_map[init_func_name] = func_index
+        func_index += 1
+
+        # 4. 记录类信息
+        info = ClassInfo(class_name, parent_name)
+        info.methods = method_funcs
+        info.is_abstract = is_abstract
+        self.class_infos[class_name] = info
+
+        return func_index
 
     def compile_var_decl(self, stmt):
         slot = self.alloc_local(stmt.name)
@@ -887,13 +981,135 @@ class Compiler:
         elif isinstance(expr, ListLiteral):
             self.compile_list_literal(expr)
         elif isinstance(expr, NewExpr):
-            raise CompileError("new 表达式暂不支持编译")
+            self.compile_new_expr(expr)
         elif isinstance(expr, GetAttr):
             self.compile_getattr(expr)
         elif isinstance(expr, IndexExpr):
             self.compile_index_expr(expr)
         else:
             raise CompileError(f"不支持的表达式: {type(expr).__name__}")
+
+    def compile_new_expr(self, expr: NewExpr):
+        """编译 new ClassName(args)
+        1. CALL ClassName_class_init 创建对象
+        2. 调用 INIT 构造器（如果存在）
+        3. 返回 obj
+        """
+        class_name = expr.class_name
+
+        # 抽象类检查
+        if class_name in self.class_infos:
+            info = self.class_infos[class_name]
+            if info.is_abstract:
+                raise CompileError(f"错误 18: 无法实例化抽象命途 '{class_name}'")
+            self._check_abstract_methods(class_name)
+
+        init_name = f"{class_name}_class_init"
+        if init_name not in self.func_map:
+            raise CompileError(f"未定义的命途: {class_name}")
+
+        init_idx = self.func_map[init_name]
+
+        # 分配临时变量保存 obj
+        tmp_slot = self.next_local
+        self.next_local += 1
+
+        # 1. 调用 class_init 创建对象
+        self.emit(OP_CALL)
+        self.emit_u32(init_idx)
+        self.emit_u8(0)  # class_init 无参数
+        # 栈: [obj]
+
+        # 保存 obj 到临时变量
+        self.emit(OP_STORE)
+        self.emit_u8(tmp_slot)
+        # 栈: []
+
+        # 2. 调用 INIT 构造器（在继承链中查找）
+        init_method_name = self._find_init_method(class_name)
+        if init_method_name:
+            # 加载方法引用
+            self.emit(OP_LOAD)
+            self.emit_u8(tmp_slot)  # [obj]
+            self.emit(OP_GETATTR)
+            self.emit_u32(self.add_string("INIT"))  # [func_ref]
+            # 加载 this
+            self.emit(OP_LOAD)
+            self.emit_u8(tmp_slot)  # [func_ref, obj]
+            # 压入构造参数
+            for arg in expr.args:
+                self.compile_expression(arg)
+            self.emit(OP_CALLR)
+            self.emit_u8(1 + len(expr.args))  # this + args
+            # 栈: [ret_val]
+            self.emit(OP_POP)       # 弹出 INIT 返回值
+            # 栈: []
+
+        # 3. 恢复 obj 到栈上作为 new 的结果
+        self.emit(OP_LOAD)
+        self.emit_u8(tmp_slot)
+        # 栈: [obj]
+
+    def _find_init_method(self, class_name):
+        """在继承链中查找 INIT 方法，返回函数名或 None"""
+        while class_name:
+            init_name = f"{class_name}_INIT"
+            if init_name in self.func_map:
+                return init_name
+            if class_name in self.class_infos:
+                class_name = self.class_infos[class_name].parent_name
+            else:
+                break
+        return None
+
+    def _check_abstract_methods(self, class_name):
+        """检查 class_name 及其继承链中的所有抽象方法是否已实现"""
+        # 收集所有抽象方法
+        abstract_methods = set()
+        checked = set()
+
+        def collect_abstracts(cname):
+            if not cname or cname in checked:
+                return
+            checked.add(cname)
+            if cname not in self.class_infos:
+                return
+            info = self.class_infos[cname]
+            if info.is_abstract:
+                for mname in info.methods:
+                    abstract_methods.add(mname)
+            if info.parent_name:
+                collect_abstracts(info.parent_name)
+
+        # 收集当前类及其所有父类的抽象方法
+        collect_abstracts(class_name)
+        if not abstract_methods:
+            return
+
+        # 收集当前类及其所有父类中已实现的方法
+        implemented = set()
+
+        def collect_implemented(cname):
+            if not cname or cname not in self.class_infos:
+                return
+            info = self.class_infos[cname]
+            for mname, func_name in info.methods.items():
+                # 检查方法体是否不是 pass-only
+                func_idx = self.func_map.get(func_name)
+                if func_idx:
+                    func = self.func_defs[func_idx - 1]
+                    if not self._is_pass_only(func.body):
+                        implemented.add(mname)
+            if info.parent_name:
+                collect_implemented(info.parent_name)
+
+        collect_implemented(class_name)
+
+        # 检查是否有未实现的抽象方法
+        missing = abstract_methods - implemented
+        if missing:
+            raise CompileError(
+                f"错误 18: 命途 '{class_name}' 未实现抽象方法: {', '.join(sorted(missing))}")
 
     def compile_literal(self, expr):
         val = expr.value
@@ -919,9 +1135,14 @@ class Compiler:
             raise CompileError(f"不支持的字面量: {val!r}")
 
     def compile_identifier(self, expr):
-        slot = self.get_local(expr.name)
-        self.emit(OP_LOAD)
-        self.emit_u8(slot)
+        if expr.name == 'this':
+            # this 是类方法的第一个参数（局部变量 0）
+            self.emit(OP_LOAD)
+            self.emit_u8(0)
+        else:
+            slot = self.get_local(expr.name)
+            self.emit(OP_LOAD)
+            self.emit_u8(slot)
 
     def compile_binary(self, expr):
         op = expr.op
@@ -1149,7 +1370,17 @@ class Compiler:
                 self.emit_u8(bif)
                 self.emit_u8(1)
             else:
-                raise CompileError(f"未定义的包函数或列表方法: '{qualified_name}'")
+                # 类方法调用: obj.method(args)
+                # 编译为: obj → GETATTR method → SWAP → this → args → CALLR
+                self.compile_expression(expr.callee.obj)   # [obj]
+                self.emit(OP_DUP)                          # [obj, obj]
+                self.emit(OP_GETATTR)
+                self.emit_u32(self.add_string(expr.callee.attr))  # [obj, func_ref]
+                self.emit(OP_SWAP)                         # [func_ref, obj]
+                for arg in expr.args:
+                    self.compile_expression(arg)
+                self.emit(OP_CALLR)
+                self.emit_u8(1 + len(expr.args))  # this + args
         elif isinstance(expr.callee, GetAttr) and expr.callee.attr in ('clone', 'deepclone'):
             # 复杂对象的 clone/deepclone
             bif = COPY_BIF_MAP[expr.callee.attr]

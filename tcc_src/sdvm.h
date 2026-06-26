@@ -93,6 +93,7 @@ typedef enum {
     OP_NULL      = 0x05,
     OP_DUP       = 0x06,
     OP_POP       = 0x07,
+    OP_SWAP      = 0x08,
 
     /* 局部变量 0x10-0x1F */
     OP_LOAD      = 0x10,   /* +1: local index */

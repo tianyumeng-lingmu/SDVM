@@ -2,7 +2,7 @@
 
 **Star Dance Virtual Machine** — 类 JVM 栈式虚拟机，执行 `.dance` 字节码。
 
-> 当前版本：v2.3 — 支持 FFI、包系统、namespace 调用、life 命途、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算、foreach 遍历、生成器（pause）
+> 当前版本：v2.4 — 支持 FFI、包系统、namespace 调用、life 命途（含继承和抽象类）、对象/JSON、文件 I/O、字符串操作、匿名函数、位运算、foreach 遍历、生成器（pause）
 
 SDVM 由三部分组成：
 - **前端解析器**（Python）— `star_dance/` 词法/语法分析，生成 AST
@@ -323,7 +323,9 @@ main {
 
 ## Life 命途（类）
 
-StarDance 是面向对象语言，使用 `life` 定义类：
+StarDance 是面向对象语言，使用 `life` 定义类。在 `main` 命途所在文件中，`life` 必须嵌套在 `main{}` 内部。
+
+### 基本用法
 
 ```stardance
 life Animal {
@@ -333,18 +335,81 @@ life Animal {
     thing speak() {
         see(this.name, " speaks\n");
     }
-    thing STR() {               // 字符串转换
-        return "Animal: " + this.name;
+}
+
+main {
+    thing main() {
+        object a = new Animal("Tom");
+        a.speak();              // Tom speaks
     }
-    static thing create(n) {    // 静态方法
-        return new Animal(n);
-    }
-    fix life Animal() {}        // 固定构造
-    finish life Animal() {}     // 终结器
 }
 ```
 
-> life 命途目前仅完成解析器支持，编译器暂未实现运行时（在 `main` 命途所在文件中，`life` 必须嵌套在 `main{}` 内部）。
+### 继承
+
+使用 `join`（或 `extends`）关键字继承父类：
+
+```stardance
+life Dog join Animal {
+    thing speak() {
+        see(this.name, " barks\n");
+    }
+}
+
+main {
+    thing main() {
+        object d = new Dog("Buddy");
+        d.speak();              // Buddy barks
+    }
+}
+```
+
+### 抽象命途
+
+当命途中的所有 `thing` 方法体均为 `pass` 时，该命途视为**抽象命途**。抽象命途不能被实例化（`new` 会报错误 18）。继承抽象命途的子类必须实现所有抽象方法：
+
+```stardance
+life Animal {
+    thing speak() { pass; }     // 抽象方法
+    thing walk()  { pass; }     // 抽象方法
+}
+
+life Dog join Animal {
+    thing speak() {
+        see("bark\n");           // 实现 speak
+    }
+    thing walk() { pass; }      // 仍可为 pass，继续留给子类
+}
+
+life Puppy join Dog {
+    thing walk() {
+        see("walk\n");           // 实现 walk
+    }
+}
+
+main {
+    thing main() {
+        object p = new Puppy("Buddy");  // OK：所有抽象方法已实现
+        p.speak();              // bark
+        p.walk();               // walk
+    }
+}
+```
+
+规则：
+- 抽象命途不需要 `abstract` 关键字，全 `pass` 方法体自动判定
+- `new` 抽象命途直接报错：错误 18
+- 子类未实现全部抽象方法也报错：错误 18
+
+### 其他修饰符
+
+```stardance
+static thing create(n) {    // 静态方法
+    return new Animal(n);
+}
+fix life Animal() {}        // 固定构造（不可修改）
+finish life Animal() {}     // 终结器（禁止继承）
+```
 
 ---
 
@@ -419,6 +484,7 @@ SDVM 使用基于值类型的栈式架构：
 | `NULL` | 0x05 | 压入 null |
 | `DUP` | 0x06 | 复制栈顶 |
 | `POP` | 0x07 | 弹出栈顶 |
+| `SWAP` | 0x08 | 交换栈顶两个元素 |
 | **局部变量** | | |
 | `LOAD` | 0x10 | 局部变量 → 栈（+1 字节索引） |
 | `STORE` | 0x11 | 栈 → 局部变量（+1 字节索引） |

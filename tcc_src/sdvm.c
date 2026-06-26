@@ -327,6 +327,7 @@ const char* sdvm_opname(uint8_t op) {
     case OP_NULL:   return "NULL";
     case OP_DUP:    return "DUP";
     case OP_POP:    return "POP";
+    case OP_SWAP:   return "SWAP";
     case OP_LOAD:   return "LOAD";
     case OP_STORE:  return "STORE";
     case OP_ADD:    return "ADD";
@@ -1984,7 +1985,7 @@ int sdvm_run(SDVM* vm) {
             } else if (op == OP_ANON) {
                 uint32_t fi = FETCH_U32();
                 printf(" func:%u", fi);
-                vm->ip -= 4;
+                /* FETCH_U32() 只读不改 vm->ip, 无需回退 */
             } else if (op == OP_CALLR) {
                 printf(" args:%u", FETCH_U8());
                 vm->ip -= 1;
@@ -2057,6 +2058,17 @@ int sdvm_run(SDVM* vm) {
                 vm->has_error = 1; return -1;
             }
             vm->sp--;
+            break;
+        }
+
+        case OP_SWAP: {
+            if (vm->sp < 1) {
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "SWAP: 栈不足(需要2个元素)");
+                vm->has_error = 1; return -1;
+            }
+            Value tmp = vm->stack[vm->sp];
+            vm->stack[vm->sp] = vm->stack[vm->sp - 1];
+            vm->stack[vm->sp - 1] = tmp;
             break;
         }
 
