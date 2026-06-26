@@ -2627,9 +2627,12 @@ int sdvm_run(SDVM* vm) {
             /* 实际上 function_ref 应该在 arg0 下面一个位置 */
             /* 即 stack[sp - arg_count] 是 function_ref */
             if (func_val.type != VAL_FUNC) {
-                snprintf(vm->error_msg, sizeof(vm->error_msg),
-                         "CALLR: 栈顶元素不是函数引用 (type=%d)", func_val.type);
-                vm->has_error = 1; return -1;
+                /* 未实现的方法：弹出参数和 func_ref，返回 null */
+                vm->sp -= ((int)arg_count + 1);
+                Value null_val;
+                null_val.type = VAL_NULL;
+                PUSH(null_val);
+                break;
             }
 
             uint32_t func_idx = func_val.data.func_idx;
